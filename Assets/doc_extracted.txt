@@ -1,0 +1,2322 @@
+BHARAT FOODSAFE
+BUILD-LOCKED MASTER ENGINEERING SPECIFICATION
+Version 1.5.0 — Final Architecture & Implementation Source of Truth
+AI-Assisted Daily Food-Safety Operations & Evidence Platform for Indian Restaurants
+Document control
+Final value
+Document version
+1.5.0
+Status
+BUILD-LOCKED / CODING-READY SPECIFICATION
+Supersedes
+v1.4 and all earlier conflicting architecture sections
+Architecture
+Modular monolith
+Frontend
+React + TypeScript + Vite + Tailwind
+Backend
+FastAPI + Python
+Database
+PostgreSQL
+Evidence storage
+S3-compatible object storage in production; local filesystem in development
+Scope
+Sensor-free; no IoT dependency
+Primary users
+Staff, Manager, Platform Admin; Customer/Public in Phase 3
+AI boundary
+Deterministic safety rules + record-integrity anomaly analysis
+Important: This document locks architecture and implementation contracts. It does not claim that the deployed product is already production-ready. Production still requires implementation, automated tests, security testing, verified regulatory rule review, deployment validation, retention configuration, and measured ML evaluation.
+1. Executive Summary
+Bharat FoodSafe is a mobile-first operational assurance platform for restaurants, cafés, cloud kitchens, canteens and caterers. It converts applicable food-safety requirements and restaurant SOPs into recurring tasks, captures execution evidence, evaluates recorded conditions with deterministic rules, separately analyzes record-integrity anomalies, manages incidents and corrective actions, and preserves an auditable history.
+The platform is not an FSSAI licensing portal, official inspection system, complaint portal, laboratory system, foodborne-illness diagnostic system, or replacement for physical inspection or laboratory testing. It is an operational layer between documented requirements and daily execution.
+Verified rule source / restaurant SOP        ↓Task template + immutable version        ↓Scheduled task instance        ↓Staff execution        ↓Value + evidence        ↓Deterministic safety evaluation        ↓Record-integrity analysis        ↓Normal / review / deviation / critical        ↓Incident + corrective action when configured        ↓Re-check → Manager verification        ↓Audit history + reporting
+1.1 Final architecture decision
+One modular-monolith backend; no microservice split for MVP.
+PostgreSQL is the system of record.
+Evidence binaries live in object storage; PostgreSQL stores metadata, hashes and lifecycle state.
+Safety Rules Engine and Record-Integrity Anomaly Engine are independent.
+ML never invents regulatory thresholds and never proves fraud.
+Tenant isolation is enforced server-side through TenantContext and scoped repositories/services.
+Workflow state changes use explicit command endpoints; generic status PATCH is prohibited.
+Retryable business writes use persistent idempotency.
+Auditable mutations write audit events in the same transaction as the mutation.
+Critical notifications use a transactional outbox; provider calls are asynchronous.
+Regulatory rule activation requires a verified RuleSource.
+2. Scope, Boundaries and Phase Rules
+Area
+Locked decision
+Sensor-free
+No IoT sensors, telemetry or hardware dependency.
+Operational assurance
+Tasks, evidence, deterministic safety evaluation, anomaly review, incidents, CAPA and audit.
+Public transparency
+Phase 3 only; aggregate and explicitly approved information.
+Official status
+The platform never creates official certification or official FSSAI ratings.
+OCR
+Bounded Phase-2 verification adapter only.
+Customer
+Lightweight Phase-3 account/follow feature; public browsing remains read-only.
+Multi-outlet organization
+Future scope; restaurant_id is the tenant boundary in the current model.
+Offline-first
+Future scope; not represented as an MVP capability.
+Supply chain
+Basic supplier/product/batch traceability only; no procurement ERP.
+2.1 Phase boundaries
+Feature
+Phase
+Status
+Authentication & RBAC
+1
+Core
+Restaurant/user setup
+1
+Core
+Task categories/templates/versions
+1
+Core
+Recurring task generation
+1
+Core
+Staff task dashboard
+1
+Core
+Evidence submission
+1
+Core
+Equipment master
+1
+Core
+Safety Rules Engine
+1
+Core
+Record-Integrity Engine
+1
+Core
+Incident/CAPA workflow
+1
+Core
+Manager dashboard
+1
+Core
+Audit log
+1
+Core
+Supplier/product/batch basic records
+1
+Core-lite
+Inspection-readiness report
+1
+Core
+Full Platform Admin dashboard
+2
+Core Phase 2
+Advanced role/permission configuration
+2
+Core Phase 2
+Business verification
+2
+Core Phase 2
+OCR verification adapter
+2
+Bounded capability
+Notification external adapters
+2
+Optional
+Customer account/follows
+3
+Optional
+Public business profile
+3
+Core Phase 3
+Official external-record display
+3
+Conditional
+IoT/sensors
+Future
+Explicitly excluded
+RAG/voice/advanced OCR
+Future
+Excluded from current build
+3. v1.4 Issue-by-Issue Correction Register
+Every issue identified in the architecture review is closed below. These corrections are normative for v1.5.
+ID
+Issue
+v1.5 correction
+01
+RuleSource verification metadata
+Added review_status, reviewed_by and reviewed_at; allowed states DRAFT, VERIFIED, RETIRED.
+02
+Historical safety evaluation
+Added entry_safety_evaluations to preserve exact rule, source, version, result and reason used for an entry.
+03
+Task template configuration duplication
+task_templates now stores identity/metadata only; task_template_versions is the sole owner of versioned configuration.
+04
+User-role assignment API
+Added list, assign and revoke role-assignment endpoints; revocation is historical via revoked_at.
+05
+Polymorphic rule binding
+Kept one binding table but added mandatory service-layer/CI validation: CATEGORY→task_categories; TEMPLATE→task_templates.
+06
+Evidence orphan lifecycle
+Added purpose, expires_at and ORPHANED upload state; cleanup job handles expired/unlinked objects.
+07
+Idempotency concurrency
+Added PROCESSING/COMPLETED/FAILED state so concurrent first requests cannot create duplicate effects.
+08
+Outbox crash recovery
+Added locked_at/locked_by lease fields and recovery of expired PROCESSING rows; worker uses SKIP LOCKED.
+09
+Notification deduplication
+Added unique dedupe_key and GET notification preferences.
+10
+Public profile settings API
+Added GET and PATCH endpoints.
+11
+Official records API
+Added admin list/create/update/verify/retire endpoints.
+12
+RuleSource management API
+Added CRUD plus verify/retire commands.
+13
+Safety-rule lifecycle API
+Added activation/retirement/binding commands and immutable-version rule.
+14
+Restaurant list API
+Added GET /api/v1/restaurants.
+15
+Supplier/product/batch lifecycle
+Added basic CRUD plus batch accept/reject/hold commands.
+16
+Audit chain concurrency
+Added chain_scope and transaction-level PostgreSQL advisory lock before calculating previous_hash/record_hash.
+17
+API envelope duplication
+Canonical envelope is now only success/data/meta and error/error/meta; no top-level request_id.
+18
+Duplicate API example field
+Entry request example contains exactly one value_jsonb/value_json field as defined by DTO contract.
+19
+Version metadata mismatch
+Architecture version is 1.5.0; application release version is independent and starts at 0.1.0.
+20
+Customer dashboard ambiguity
+Customer remains lightweight Phase 3; public browsing + follows are sufficient; no unnecessary customer dashboard.
+21
+Frontend API synchronization
+Added explicit API client files for task categories, rule sources, public profile settings, official records and all newly exposed backend groups.
+22
+Audit export mismatch
+Added GET /api/v1/audit-log/export with JSON/CSV output; synchronous bounded MVP export.
+23
+Evidence detail API
+Added GET /api/v1/evidence/{id} for authorized metadata/download authorization.
+24
+Incident command completeness
+Added start and recheck commands; direct status PATCH is prohibited.
+25
+CAPA command completeness
+Added start, complete, verify, reopen and cancel commands.
+26
+Outbox delivery status
+External provider delivery status/attempt metadata is stored by the provider adapter/outbox workflow.
+27
+Template/rule immutability
+A version used by a generated task cannot be edited; new version required.
+28
+Cross-tenant relationship integrity
+Services validate that referenced users/equipment/templates/suppliers/products belong to the same tenant where applicable.
+4. Functional and Non-Functional Requirements
+ID
+Requirement
+FR-01
+Authentication and protected sessions.
+FR-02
+Server-side RBAC for every protected API operation.
+FR-03
+Strict restaurant tenant isolation.
+FR-04
+Versioned task templates with explicit lifecycle.
+FR-05
+Idempotent recurring task generation.
+FR-06
+Staff task execution and evidence submission.
+FR-07
+Configured evidence requirements cannot be bypassed.
+FR-08
+Deterministic, source-linked safety evaluation.
+FR-09
+Record-integrity anomaly review signal.
+FR-10
+Incident creation for critical/configured review conditions.
+FR-11
+Corrective-action lifecycle with manager verification.
+FR-12
+Append-only audit history including denied security actions.
+FR-13
+Hybrid business verification.
+FR-14
+In-app and optional external notifications.
+FR-15
+Operational and inspection-readiness reporting.
+FR-16
+Controlled Phase-3 public profile.
+FR-17
+Physical equipment as a domain entity, not IoT.
+FR-18
+Persistent idempotency for retryable writes.
+FR-19
+Revocable persisted refresh sessions.
+FR-20
+Verified rule catalogue before production activation.
+4.1 Non-functional requirements
+Security: credential hashes only, server-side authorization, tenant isolation, secret management.
+Auditability: actor, tenant, entity, action, request ID, timestamp and relevant before/after values.
+Reliability: transactional critical workflows, idempotent writes, recoverable outbox.
+Performance: paginated lists, indexed queues, aggregate dashboards, bounded ML inference.
+Accessibility: semantic labels, keyboard access, focus states, contrast and readable validation.
+Responsive UX: staff mobile-first; manager/admin desktop-first responsive.
+Observability: structured logs, request IDs, health/readiness, error and job metrics.
+Privacy: no employee/raw evidence/internal notes in public APIs.
+Regulatory freshness: source/version/effective-date records; no silent threshold mutation.
+5. Technology Stack and Version Policy
+Layer
+Approved baseline
+Rule
+Frontend
+React 19.2.x + TypeScript
+Exact resolved versions locked in package lockfile.
+Build
+Vite 8.x
+Exact version locked in package lockfile.
+Styling
+Tailwind CSS 4.x
+No component framework required.
+Routing
+React Router 7.x
+Protected role-aware route composition.
+Server state
+TanStack Query 5.x
+No unnecessary global API state.
+Forms
+React Hook Form 7.x + Zod 4.x
+Client validation only; server authoritative.
+Backend
+FastAPI + Python 3.13.x
+Exact versions locked in project configuration.
+ORM
+SQLAlchemy 2.x
+Explicit transaction boundaries.
+Driver
+psycopg 3.x
+PostgreSQL connectivity.
+Migrations
+Alembic 1.x
+All schema changes version-controlled.
+Database
+PostgreSQL 18.x
+System of record.
+ML
+scikit-learn 1.7.x + pandas + numpy
+Record-integrity analysis only.
+Storage
+S3-compatible object storage
+Required in production.
+Auth
+JWT access + persisted refresh sessions
+Refresh tokens stored only as hashes.
+Testing
+Pytest/HTTPX + Vitest/RTL + Playwright
+Unit/API/integration/E2E.
+DevOps
+Docker + GitHub Actions
+No Kubernetes required.
+Version policy: The specification approves technology families/baselines. The package manager lockfiles are authoritative for exact resolved versions. Do not upgrade dependencies during feature work without a deliberate dependency-change review.
+6. System Architecture
+Browser / PWA    │ HTTPS + JSON    ▼FastAPI Modular Monolith    ├── Auth / Sessions / RBAC    ├── Restaurants / Tenant Boundary    ├── Users / Roles / Permissions    ├── Tasks / Templates / Scheduler    ├── Equipment    ├── Evidence / Uploads    ├── Safety Rules Engine    ├── Record-Integrity Engine    ├── Incidents / Corrective Actions    ├── Suppliers / Products / Batches    ├── Verification / OCR adapter (Phase 2)    ├── Notifications / Outbox    ├── Reports / Dashboards    └── Audit          │          ├── PostgreSQL          ├── Object Storage          └── Optional Email/SMS providers
+6.1 Canonical request lifecycle
+HTTP Request→ Request ID→ CORS/security middleware→ Authenticate access token→ Validate user/session status→ Resolve permission→ Resolve TenantContext→ Validate Pydantic DTO→ Idempotency check (retryable writes)→ Begin service transaction→ Domain service→ Repository / engine calls→ Audit event(s)→ Outbox event(s) if required→ Commit→ Response DTO
+Routers contain HTTP concerns only.
+Services own business workflows and transaction boundaries.
+Repositories perform database access only.
+Engines are deterministic/pure where practical.
+ORM models never leak directly through API responses.
+Cross-domain calls use service interfaces, not direct SQL from another module.
+7. Database Architecture
+PostgreSQL is the system of record. UUID primary keys and UTC TIMESTAMPTZ timestamps are used throughout. JSONB is reserved for versioned/configurable structures, rule conditions/actions, model explanations/features, and extracted verification fields.
+7.1 Canonical table inventory — 37 tables
+1. restaurants
+2. users
+3. roles
+4. permissions
+5. role_permissions
+6. user_roles
+7. devices
+8. auth_sessions
+9. task_categories
+10. rule_sources
+11. safety_rules
+12. safety_rule_bindings
+13. task_templates
+14. task_template_versions
+15. equipment
+16. tasks
+17. task_assignments
+18. entries
+19. entry_safety_evaluations
+20. evidence_files
+21. idempotency_keys
+22. model_versions
+23. anomaly_results
+24. incidents
+25. corrective_actions
+26. suppliers
+27. products
+28. batches
+29. business_verifications
+30. verification_documents
+31. notifications
+32. notification_preferences
+33. outbox_events
+34. audit_log
+35. public_profile_settings
+36. customer_follows
+37. official_records
+7.2 Normative schema — exact v1.5 contract
+restaurants — id UUID PK; name VARCHAR(200) NOT NULL; legal_name VARCHAR(250); category VARCHAR(80) NOT NULL; address_line1 VARCHAR(250) NOT NULL; address_line2 VARCHAR(250); city VARCHAR(100) NOT NULL; state VARCHAR(100) NOT NULL; pincode VARCHAR(10) NOT NULL; phone VARCHAR(20); email VARCHAR(255); timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Kolkata'; status VARCHAR(20) NOT NULL CHECK IN (ACTIVE,SUSPENDED,ARCHIVED); created_at TIMESTAMPTZ NOT NULL; updated_at TIMESTAMPTZ NOT NULL.
+users — id UUID PK; restaurant_id UUID FK restaurants.id NULL for platform/customer; name VARCHAR(160) NOT NULL; email VARCHAR(255) NULL; phone VARCHAR(20) NULL; password_hash VARCHAR(255) NULL; pin_hash VARCHAR(255) NULL; status VARCHAR(20) NOT NULL CHECK IN (INVITED,ACTIVE,SUSPENDED,DISABLED); last_login_at TIMESTAMPTZ NULL; created_at; updated_at.
+roles — id UUID PK; name VARCHAR(80) UNIQUE NOT NULL; description VARCHAR(255); is_system_role BOOLEAN NOT NULL DEFAULT false; created_at TIMESTAMPTZ NOT NULL.
+permissions — id UUID PK; resource VARCHAR(80) NOT NULL; action VARCHAR(40) NOT NULL; created_at TIMESTAMPTZ NOT NULL; UNIQUE(resource,action).
+role_permissions — id UUID PK; role_id UUID FK roles.id ON DELETE CASCADE; permission_id UUID FK permissions.id ON DELETE CASCADE; created_at TIMESTAMPTZ NOT NULL; UNIQUE(role_id,permission_id).
+user_roles — id UUID PK; user_id UUID FK users.id ON DELETE RESTRICT; role_id UUID FK roles.id ON DELETE RESTRICT; restaurant_id UUID FK restaurants.id NULL; assigned_by UUID FK users.id NULL; assigned_at TIMESTAMPTZ NOT NULL; revoked_at TIMESTAMPTZ NULL.
+devices — id UUID PK; user_id UUID FK users.id ON DELETE RESTRICT; restaurant_id UUID FK restaurants.id ON DELETE RESTRICT; device_identifier_hash VARCHAR(128) NOT NULL; name VARCHAR(120); platform VARCHAR(40) NOT NULL; last_seen_at TIMESTAMPTZ; is_active BOOLEAN NOT NULL DEFAULT true; created_at TIMESTAMPTZ NOT NULL.
+auth_sessions — id UUID PK; user_id UUID FK users.id ON DELETE CASCADE; refresh_token_hash VARCHAR(255) UNIQUE NOT NULL; token_family_id UUID NOT NULL; device_id UUID FK devices.id ON DELETE SET NULL; issued_at TIMESTAMPTZ NOT NULL; expires_at TIMESTAMPTZ NOT NULL; revoked_at TIMESTAMPTZ NULL; last_used_at TIMESTAMPTZ NULL; replaced_by_session_id UUID FK auth_sessions.id NULL; created_at TIMESTAMPTZ NOT NULL.
+task_categories — id UUID PK; name VARCHAR(100) UNIQUE NOT NULL; description VARCHAR(255); active BOOLEAN NOT NULL DEFAULT true; created_at TIMESTAMPTZ NOT NULL.
+rule_sources — id UUID PK; authority VARCHAR(160) NOT NULL; title VARCHAR(300) NOT NULL; document_type VARCHAR(80) NOT NULL; version_label VARCHAR(80); reference VARCHAR(200) NOT NULL; source_url TEXT; effective_from DATE; effective_to DATE; retrieved_at TIMESTAMPTZ NOT NULL; review_status VARCHAR(20) NOT NULL CHECK IN (DRAFT,VERIFIED,RETIRED); reviewed_by UUID FK users.id NULL; reviewed_at TIMESTAMPTZ NULL; created_at TIMESTAMPTZ NOT NULL.
+safety_rules — id UUID PK; supersedes_rule_id UUID FK safety_rules.id NULL; restaurant_id UUID FK restaurants.id NULL; rule_code VARCHAR(120) NOT NULL; version_number INTEGER NOT NULL CHECK >0; rule_source_id UUID FK rule_sources.id ON DELETE RESTRICT NOT NULL; name VARCHAR(200) NOT NULL; rule_type VARCHAR(60) NOT NULL; condition_jsonb JSONB NOT NULL; severity VARCHAR(20) NOT NULL CHECK IN (NORMAL,DEVIATION,CRITICAL); action_jsonb JSONB NOT NULL; active BOOLEAN NOT NULL DEFAULT false; effective_from TIMESTAMPTZ NOT NULL; effective_to TIMESTAMPTZ NULL; created_by UUID FK users.id ON DELETE SET NULL; created_at TIMESTAMPTZ NOT NULL.
+safety_rule_bindings — id UUID PK; rule_id UUID FK safety_rules.id ON DELETE CASCADE; target_type VARCHAR(20) NOT NULL CHECK IN (CATEGORY,TEMPLATE); target_id UUID NOT NULL; created_at TIMESTAMPTZ NOT NULL; UNIQUE(rule_id,target_type,target_id). Service-layer + CI validation enforce CATEGORY→task_categories.id and TEMPLATE→task_templates.id.
+task_templates — id UUID PK; restaurant_id UUID FK restaurants.id ON DELETE RESTRICT; category_id UUID FK task_categories.id ON DELETE RESTRICT; name VARCHAR(180) NOT NULL; description TEXT; active BOOLEAN NOT NULL DEFAULT true; created_by UUID FK users.id NULL; created_at TIMESTAMPTZ NOT NULL; updated_at TIMESTAMPTZ NOT NULL. Versioned task configuration is NOT stored here.
+task_template_versions — id UUID PK; template_id UUID FK task_templates.id ON DELETE RESTRICT; version_number INTEGER NOT NULL CHECK >0; configuration_jsonb JSONB NOT NULL validated discriminated schema; effective_from TIMESTAMPTZ NOT NULL; effective_to TIMESTAMPTZ NULL; created_by UUID FK users.id NULL; created_at TIMESTAMPTZ NOT NULL; UNIQUE(template_id,version_number). Immutable after first task generation.
+equipment — id UUID PK; restaurant_id UUID FK restaurants.id ON DELETE RESTRICT; name VARCHAR(160) NOT NULL; equipment_type VARCHAR(80) NOT NULL; identifier VARCHAR(120); location VARCHAR(160); status VARCHAR(20) CHECK IN (ACTIVE,OUT_OF_SERVICE,RETIRED); notes TEXT; created_at; updated_at.
+tasks — id UUID PK; restaurant_id UUID FK restaurants.id ON DELETE RESTRICT; template_id UUID FK task_templates.id ON DELETE RESTRICT; template_version_id UUID FK task_template_versions.id ON DELETE RESTRICT; equipment_id UUID FK equipment.id ON DELETE RESTRICT NULL; assigned_to UUID FK users.id ON DELETE RESTRICT NULL; scheduled_for TIMESTAMPTZ NOT NULL; due_at TIMESTAMPTZ NOT NULL; occurrence_key VARCHAR(180) NOT NULL; status VARCHAR(20) CHECK IN (PENDING,IN_PROGRESS,COMPLETED,OVERDUE,REVIEW,CANCELLED); priority VARCHAR(20) NOT NULL; created_at; started_at NULL; completed_at NULL; UNIQUE(template_id,occurrence_key).
+task_assignments — id UUID PK; task_id UUID FK tasks.id ON DELETE RESTRICT; user_id UUID FK users.id ON DELETE RESTRICT; assigned_by UUID FK users.id NULL; assigned_at TIMESTAMPTZ NOT NULL; unassigned_at TIMESTAMPTZ NULL; reason TEXT NULL.
+entries — id UUID PK; restaurant_id UUID FK restaurants.id ON DELETE RESTRICT; task_id UUID FK tasks.id ON DELETE RESTRICT; submitted_by UUID FK users.id ON DELETE RESTRICT; device_id UUID FK devices.id ON DELETE SET NULL; equipment_id UUID FK equipment.id ON DELETE RESTRICT NULL; value_numeric NUMERIC(12,3) NULL; value_text TEXT NULL; value_jsonb JSONB NULL; unit VARCHAR(30) NULL; submitted_at TIMESTAMPTZ NOT NULL; edited_at TIMESTAMPTZ NULL; edit_reason TEXT NULL; safety_status VARCHAR(20) CHECK IN (NORMAL,DEVIATION,CRITICAL); trust_level VARCHAR(30) CHECK IN (SELF_REPORTED,EVIDENCE_SUPPORTED,NEEDS_REVIEW,CRITICAL_DEVIATION,MANAGER_VERIFIED,OFFICIALLY_CONFIRMED); validation_status VARCHAR(20) CHECK IN (VALID,INVALID,REVIEW); idempotency_key_id UUID FK idempotency_keys.id NULL.
+entry_safety_evaluations — id UUID PK; entry_id UUID FK entries.id ON DELETE RESTRICT; rule_id UUID FK safety_rules.id ON DELETE RESTRICT; rule_source_id UUID FK rule_sources.id ON DELETE RESTRICT; rule_version INTEGER NOT NULL; result VARCHAR(20) CHECK IN (NORMAL,DEVIATION,CRITICAL); severity VARCHAR(20) NOT NULL; reason TEXT NOT NULL; required_action TEXT; evaluated_at TIMESTAMPTZ NOT NULL. Immutable historical evaluation snapshot.
+evidence_files — id UUID PK; restaurant_id UUID FK restaurants.id ON DELETE RESTRICT; entry_id UUID FK entries.id ON DELETE RESTRICT NULL; verification_id UUID FK business_verifications.id ON DELETE RESTRICT NULL; purpose VARCHAR(30) CHECK IN (ENTRY_EVIDENCE,VERIFICATION_DOCUMENT) NOT NULL; storage_key VARCHAR(500) UNIQUE NOT NULL; original_filename VARCHAR(255) NOT NULL; mime_type VARCHAR(100) NOT NULL; size_bytes BIGINT CHECK >0; sha256 CHAR(64) NOT NULL; perceptual_hash VARCHAR(128); upload_status VARCHAR(20) CHECK IN (PENDING,AVAILABLE,REJECTED,ORPHANED,DELETED); uploaded_by UUID FK users.id NOT NULL; uploaded_at TIMESTAMPTZ NOT NULL; expires_at TIMESTAMPTZ NULL; deleted_at TIMESTAMPTZ NULL.
+idempotency_keys — id UUID PK; user_id UUID FK users.id ON DELETE CASCADE; key VARCHAR(255) NOT NULL; request_hash CHAR(64) NOT NULL; status VARCHAR(20) CHECK IN (PROCESSING,COMPLETED,FAILED) NOT NULL; response_status SMALLINT NULL; response_jsonb JSONB NULL; created_at TIMESTAMPTZ NOT NULL; expires_at TIMESTAMPTZ NOT NULL; UNIQUE(user_id,key).
+model_versions — id UUID PK; name VARCHAR(100) NOT NULL; version VARCHAR(50) NOT NULL; algorithm VARCHAR(100) NOT NULL; threshold NUMERIC(8,5); training_dataset_version VARCHAR(100) NOT NULL; metrics_jsonb JSONB NOT NULL; artifact_path VARCHAR(500) NOT NULL; artifact_sha256 CHAR(64) NOT NULL; is_active BOOLEAN NOT NULL DEFAULT false; created_at TIMESTAMPTZ NOT NULL; UNIQUE(name,version).
+anomaly_results — id UUID PK; restaurant_id UUID FK restaurants.id; entry_id UUID FK entries.id; model_version_id UUID FK model_versions.id NULL; analysis_status VARCHAR(20) CHECK IN (AVAILABLE,UNAVAILABLE) NOT NULL; baseline_score NUMERIC(10,5) NULL; ml_score NUMERIC(10,5) NULL; combined_score NUMERIC(10,5) NULL; decision VARCHAR(30) CHECK IN (NO_FLAG,REVIEW,ESCALATE); risk_level VARCHAR(20) CHECK IN (LOW,MEDIUM,HIGH,CRITICAL); reasons_jsonb JSONB NOT NULL; features_jsonb JSONB NOT NULL; created_at TIMESTAMPTZ NOT NULL.
+incidents — id UUID PK; restaurant_id UUID FK restaurants.id; entry_id UUID FK entries.id NULL; type VARCHAR(60) NOT NULL; severity VARCHAR(20) NOT NULL; status VARCHAR(30) CHECK IN (OPEN,ASSIGNED,IN_PROGRESS,AWAITING_RECHECK,VERIFICATION_PENDING,CLOSED,REOPENED); description TEXT NOT NULL; detected_by VARCHAR(30) CHECK IN (SYSTEM,STAFF,MANAGER,ANOMALY); opened_at TIMESTAMPTZ NOT NULL; closed_at TIMESTAMPTZ NULL; created_at; updated_at.
+corrective_actions — id UUID PK; restaurant_id UUID FK restaurants.id; incident_id UUID FK incidents.id; assigned_to UUID FK users.id; action_type VARCHAR(60); description TEXT; priority VARCHAR(20); deadline TIMESTAMPTZ; status VARCHAR(20) CHECK IN (OPEN,IN_PROGRESS,COMPLETED,VERIFIED,REOPENED,CANCELLED); started_at NULL; completed_at NULL; resolution_note TEXT NULL; verified_by UUID FK users.id NULL; verified_at TIMESTAMPTZ NULL; created_at; updated_at.
+suppliers — id UUID PK; restaurant_id UUID FK restaurants.id; name VARCHAR(180) NOT NULL; phone VARCHAR(20); email VARCHAR(255); address TEXT; status VARCHAR(20) NOT NULL; created_at; updated_at.
+products — id UUID PK; restaurant_id UUID FK restaurants.id; name VARCHAR(180) NOT NULL; category VARCHAR(100); unit VARCHAR(30) NOT NULL; active BOOLEAN NOT NULL DEFAULT true; created_at; updated_at.
+batches — id UUID PK; restaurant_id UUID FK restaurants.id; supplier_id UUID FK suppliers.id; product_id UUID FK products.id; batch_no VARCHAR(120) NOT NULL; manufacture_date DATE; expiry_date DATE; quantity NUMERIC(14,3) CHECK >=0; received_at TIMESTAMPTZ NOT NULL; status VARCHAR(20) CHECK IN (PENDING,ACCEPTED,REJECTED,HOLD) NOT NULL; created_at; updated_at.
+business_verifications — id UUID PK; restaurant_id UUID FK restaurants.id; status VARCHAR(30) CHECK IN (DRAFT,SUBMITTED,PROCESSING,VERIFIED,NEEDS_MANUAL_REVIEW,MORE_EVIDENCE,REJECTED); method VARCHAR(30) NOT NULL; confidence_score NUMERIC(6,5) NULL; failure_reason TEXT NULL; reviewed_by UUID FK users.id NULL; reviewed_at TIMESTAMPTZ NULL; created_at; updated_at.
+verification_documents — id UUID PK; verification_id UUID FK business_verifications.id; evidence_file_id UUID FK evidence_files.id; document_type VARCHAR(60) NOT NULL; ocr_status VARCHAR(30) CHECK IN (NOT_REQUESTED,PENDING,COMPLETE,FAILED,MANUAL_REVIEW); extracted_fields_jsonb JSONB NULL; uploaded_by UUID FK users.id; uploaded_at TIMESTAMPTZ NOT NULL.
+notifications — id UUID PK; user_id UUID FK users.id; type VARCHAR(60) NOT NULL; title VARCHAR(200) NOT NULL; message TEXT NOT NULL; related_entity_type VARCHAR(80); related_entity_id UUID; dedupe_key VARCHAR(255) UNIQUE NOT NULL; read_at TIMESTAMPTZ NULL; created_at TIMESTAMPTZ NOT NULL.
+notification_preferences — id UUID PK; user_id UUID FK users.id; event_type VARCHAR(60); channel VARCHAR(20) CHECK IN (IN_APP,EMAIL,SMS); enabled BOOLEAN NOT NULL DEFAULT true; created_at; updated_at; UNIQUE(user_id,event_type,channel).
+outbox_events — id UUID PK; event_type VARCHAR(80); aggregate_type VARCHAR(80); aggregate_id UUID; payload_jsonb JSONB; dedupe_key VARCHAR(255) UNIQUE NOT NULL; status VARCHAR(20) CHECK IN (PENDING,PROCESSING,SENT,FAILED); attempts INTEGER NOT NULL DEFAULT 0; next_attempt_at TIMESTAMPTZ NOT NULL; locked_at TIMESTAMPTZ NULL; locked_by VARCHAR(120) NULL; last_error TEXT NULL; created_at; processed_at TIMESTAMPTZ NULL.
+audit_log — id UUID PK; chain_scope VARCHAR(120) NOT NULL; restaurant_id UUID FK restaurants.id NULL; actor_id UUID FK users.id NULL; entity_type VARCHAR(80) NOT NULL; entity_id UUID NULL; action VARCHAR(80) NOT NULL; old_value_jsonb JSONB NULL; new_value_jsonb JSONB NULL; ip_address INET NULL; user_agent VARCHAR(500) NULL; request_id UUID NULL; timestamp TIMESTAMPTZ NOT NULL; previous_hash CHAR(64) NULL; record_hash CHAR(64) NULL.
+public_profile_settings — id UUID PK; restaurant_id UUID FK restaurants.id UNIQUE; is_public BOOLEAN NOT NULL DEFAULT false; show_completion_rate BOOLEAN NOT NULL DEFAULT false; show_trends BOOLEAN NOT NULL DEFAULT false; show_corrective_summary BOOLEAN NOT NULL DEFAULT false; show_verification BOOLEAN NOT NULL DEFAULT true; updated_at TIMESTAMPTZ NOT NULL.
+customer_follows — id UUID PK; customer_user_id UUID FK users.id; restaurant_id UUID FK restaurants.id; created_at TIMESTAMPTZ NOT NULL; UNIQUE(customer_user_id,restaurant_id).
+official_records — id UUID PK; restaurant_id UUID FK restaurants.id; source VARCHAR(160) NOT NULL; record_type VARCHAR(80) NOT NULL; external_reference VARCHAR(200); status VARCHAR(30) NOT NULL; rating VARCHAR(40); issued_at DATE; expires_at DATE; source_url TEXT; verified_at TIMESTAMPTZ; verified_by UUID FK users.id NULL; retired_at TIMESTAMPTZ NULL.
+7.3 Database relationship rules
+restaurants → users, equipment, task_templates, tasks, entries, incidents, corrective_actions, suppliers, products, batches, business_verifications, public_profile_settings, official_records.
+users ↔ roles through user_roles; roles ↔ permissions through role_permissions.
+task_templates → task_template_versions → tasks.
+tasks → task_assignments and entries.
+entries → evidence_files, entry_safety_evaluations, anomaly_results, incidents.
+incidents → corrective_actions.
+suppliers + products → batches.
+business_verifications → verification_documents → evidence_files.
+users → notifications, notification_preferences, audit_log.
+customer users ↔ restaurants through customer_follows.
+7.4 Critical constraints and indexes
+Index/constraint
+Purpose
+uq_users_email: unique lower(email) where non-null
+Account lookup.
+uq_users_phone: unique phone where non-null
+Staff/manager login.
+uq_idempotency: unique(user_id,key)
+Duplicate-write prevention.
+uq_task_occurrence: unique(template_id,occurrence_key)
+Scheduler duplicate prevention.
+uq_template_version: unique(template_id,version_number)
+Immutable configuration lineage.
+uq_rule_binding: unique(rule_id,target_type,target_id)
+Binding deduplication.
+uq_notification_dedupe: unique(dedupe_key)
+Notification deduplication.
+uq_outbox_dedupe: unique(dedupe_key)
+Reliable event deduplication.
+ix_tasks_staff_queue
+(restaurant_id,assigned_to,status,due_at).
+ix_tasks_manager_queue
+(restaurant_id,status,due_at).
+ix_entries_task_time
+(task_id,submitted_at).
+ix_entries_actor_time
+(submitted_by,submitted_at).
+ix_anomaly_review
+(restaurant_id,decision,created_at).
+ix_incidents_queue
+(restaurant_id,status,severity,opened_at).
+ix_capa_queue
+(restaurant_id,status,deadline).
+ix_audit_entity
+(entity_type,entity_id,timestamp).
+ix_audit_actor
+(actor_id,timestamp).
+ix_notifications
+(user_id,read_at,created_at).
+ix_batches_expiry
+(restaurant_id,expiry_date,status).
+8. State Machines and Workflow Commands
+8.1 Task state machine
+PENDING → IN_PROGRESS → COMPLETEDPENDING → OVERDUE → IN_PROGRESSCOMPLETED → REVIEW → COMPLETEDREVIEW → CANCELLEDPENDING → CANCELLEDOVERDUE → CANCELLED
+8.2 Incident state machine
+OPEN → ASSIGNED → IN_PROGRESS → AWAITING_RECHECK → VERIFICATION_PENDING → CLOSEDVERIFICATION_PENDING → REOPENED → IN_PROGRESSOPEN → CLOSED only for explicitly resolved informational incidents
+8.3 Corrective action state machine
+OPEN → IN_PROGRESS → COMPLETED → VERIFIEDCOMPLETED → REOPENED → IN_PROGRESSOPEN → CANCELLED
+8.4 Verification state machine
+DRAFT → SUBMITTED → PROCESSINGPROCESSING → VERIFIEDPROCESSING → NEEDS_MANUAL_REVIEWPROCESSING → REJECTEDNEEDS_MANUAL_REVIEW → VERIFIED / REJECTED / MORE_EVIDENCEMORE_EVIDENCE → PROCESSINGREJECTED → SUBMITTED
+8.5 Batch state machine
+PENDING → ACCEPTEDPENDING → REJECTEDPENDING → HOLDHOLD → ACCEPTEDHOLD → REJECTED
+Workflow rule: There are no generic status PATCH endpoints for workflow entities. Every transition is validated by a service-layer state machine and illegal transitions return 409.
+9. Safety Rules Engine
+The Safety Rules Engine answers: “Does the recorded condition violate a configured rule?” It is deterministic, versioned, source-linked and independent from anomaly scoring.
+9.1 Inputs
+Task type/category
+Numeric/text/checklist value
+Unit
+Equipment where applicable
+Applicable business category
+Effective rule version
+Restaurant-specific rule where authorized
+Severity/action configuration
+9.2 Output
+{  "status": "NORMAL | DEVIATION | CRITICAL",  "rule_id": "uuid",  "severity": "LOW | MEDIUM | HIGH | CRITICAL",  "reason": "Configured condition was not satisfied",  "required_action": "Configured SOP / create incident"}
+9.3 Rule versioning and activation
+Each safety_rules row represents one immutable rule version.
+rule_code identifies the logical rule; version_number identifies the version.
+supersedes_rule_id links a new version to the prior version.
+PATCH on a used rule never mutates the historical row; it creates a new version.
+No rule may activate unless its RuleSource.review_status is VERIFIED.
+Regulatory values are not hard-coded in Python source.
+Historical entry evaluations reference the exact rule and source version used.
+Platform rules may apply across restaurants; restaurant-specific rules may add stricter conditions but may not silently weaken a platform CRITICAL rule.
+Conflicting rules resolve by severity. Equal-severity conflicts return REVIEW and are recorded for admin review.
+9.4 Rule binding validation
+CATEGORY binding target_id must exist in task_categories.
+TEMPLATE binding target_id must exist in task_templates.
+A rule without a binding may remain DRAFT but cannot affect tasks.
+Template-specific binding changes applicability only; it never bypasses source verification.
+10. Record-Integrity Anomaly Engine
+The engine answers: “Does this record look statistically unusual or potentially unreliable?” It is not a fraud detector and cannot prove physical non-performance.
+Feature
+Meaning
+timing_regularity
+Submission timing relative to expected schedule.
+value_variance
+Rolling variance for employee/task type.
+burst_score
+Submissions inside a short time window.
+photo_reuse_count
+Exact/near-duplicate evidence frequency.
+edit_frequency
+Number/timing of edits after submission.
+device_novelty
+New device for user/restaurant.
+late_submission_ratio
+Historical late-entry proportion.
+perfect_compliance_pattern
+Potentially unusual zero-variance/zero-deviation pattern with sufficient history.
+Synthetic normal data→ adversarial injection→ feature engineering→ robust statistical baseline→ Isolation Forest→ combined decision→ human-readable explanation→ precision / recall / F1 / false-positive analysis
+Cold start: insufficient history results in conservative behavior; no strong anomaly score is manufactured.
+Production inference uses a frozen model artifact and model_version.
+Manager review outcomes do not automatically retrain the model in MVP.
+Model failure produces analysis_status=UNAVAILABLE and leaves deterministic safety results unchanged.
+Anomaly output is NO_FLAG, REVIEW or ESCALATE; it is never a safety verdict.
+11. Evidence Lifecycle and Upload Security
+Presign request→ validate tenant/purpose/metadata→ generate random object key→ client uploads to object storage→ confirm upload→ HEAD/read metadata→ validate size + MIME + magic bytes + hash→ AVAILABLE→ attach to entry/verification→ retention / soft-delete / cleanup
+11.1 Evidence states
+State
+Meaning
+PENDING
+Presigned upload created but not yet confirmed/linked.
+AVAILABLE
+Object validated and usable.
+REJECTED
+Validation failed.
+ORPHANED
+Upload expired or could not be linked after the allowed window.
+DELETED
+Metadata soft-deleted; object lifecycle follows retention policy.
+purpose is ENTRY_EVIDENCE or VERIFICATION_DOCUMENT.
+expires_at controls the abandoned-upload window.
+Original filenames are metadata only and never become storage paths.
+Server generates random object keys.
+Public APIs never expose private storage keys.
+Exact duplicate detection uses SHA-256; near-duplicate review may use perceptual hash.
+Executable/archive file types are rejected.
+Uploads are rate-limited and size-limited.
+12. Idempotency Contract
+Retryable business mutations require Authorization plus Idempotency-Key. Authentication endpoints, health endpoints and semantically idempotent DELETE operations are documented exceptions.
+First request:PROCESSING row is created under UNIQUE(user_id,key)→ business transaction executes→ COMPLETED row stores status + responseConcurrent same request:→ detects PROCESSING→ waits/retries/replays; no duplicate business effectSame key + different canonical request:→ 409 IDEMPOTENCY_KEY_REUSE
+request_hash covers HTTP method, path, authenticated user and canonical request body.
+Idempotency is checked before business side effects.
+The final response is stored for replay.
+Failed attempts are represented as FAILED when no successful business result exists.
+Keys expire and are cleaned by a scheduled job.
+No duplicate entry, incident, audit or notification side effects are allowed.
+13. Audit Integrity and Hash Chain
+Auditable mutations and denied security actions produce append-only audit events in the same database transaction as the relevant mutation whenever applicable.
+13.1 Canonical audit event
+idactor_idrestaurant_idchain_scopeentity_typeentity_idactionold_valuenew_valuetimestamprequest_idprevious_hashrecord_hash
+record_hash = SHA-256(UTF-8 canonical JSON of the event including previous_hash)
+13.2 Concurrency control
+Determine chain_scope. Use a stable restaurant scope for tenant events and PLATFORM for platform-only security events.
+Start the service transaction.
+Acquire a PostgreSQL transaction-level advisory lock derived from chain_scope using pg_advisory_xact_lock.
+Read the latest audit event for that chain_scope.
+Set previous_hash to the latest record_hash, or NULL for the first event.
+Canonicalize the event deterministically and compute SHA-256.
+Insert the audit row.
+Commit together with the business mutation/outbox row.
+No normal application UPDATE or DELETE endpoint exists for audit_log.
+Sensitive fields are redacted before persistence.
+Large payloads are represented as field-level changes rather than binary content.
+An audit verification utility can recompute the chain and report the first broken link.
+14. Notification and Transactional Outbox
+Business mutation+ audit event+ outbox_events row        ↓ COMMITOutbox worker→ claim with SELECT ... FOR UPDATE SKIP LOCKED→ set PROCESSING + lease→ call provider outside DB transaction→ SENT or retry→ FAILED after max attempts + admin system alert
+Event
+Default audience
+Channel
+TASK_OVERDUE
+Assigned staff + manager
+In-app
+CRITICAL_DEVIATION
+Manager
+In-app; optional external
+CORRECTIVE_ACTION_OVERDUE
+Assignee + manager
+In-app
+ANOMALY_NEEDS_REVIEW
+Manager
+In-app
+VERIFICATION_RESULT
+Manager/admin
+In-app; optional email
+SYSTEM_SECURITY_EVENT
+Admin
+In-app
+outbox_events.dedupe_key is unique.
+PROCESSING rows have locked_at and locked_by.
+A recovery job resets expired PROCESSING leases to PENDING.
+Retries use exponential backoff and bounded attempts.
+External provider failure never rolls back the already committed business transaction.
+If external channels are enabled, provider status/attempt metadata is retained.
+notification dedupe_key is unique to prevent duplicate in-app alerts.
+15. Authentication, Authorization and Tenant Isolation
+Role
+Authentication
+Boundary
+Staff
+Phone + PIN
+Assigned/allowed tasks within own restaurant.
+Manager
+Phone + PIN
+Own restaurant.
+Platform Admin
+Email + password
+Platform-wide administrative controls.
+Customer
+Email + password (Phase 3)
+Own account + public/read-only data.
+Public
+None
+Explicitly published public data only.
+15.1 RBAC persistence
+Permission(resource, action)        ↑role_permissions        ↑      Role        ↑   user_roles        ↑      User
+System roles are seeded and cannot be deleted.
+Custom roles are Platform Admin controlled.
+System roles cannot lose mandatory permissions through the UI.
+A user may have multiple active roles; effective permissions are the union within the current tenant.
+Restaurant-scoped role assignments require restaurant_id; platform roles may have NULL restaurant_id.
+Role changes and role assignment/revocation are audited.
+15.2 Session security
+Short-lived access tokens.
+Persisted refresh sessions with hashed refresh tokens.
+Refresh-token rotation with token_family_id.
+Reuse detection revokes the entire token family and requires re-authentication.
+Logout revokes the current refresh session; logout-all revokes all active sessions.
+PIN/password changes revoke other refresh sessions.
+Suspended users cannot refresh or perform protected requests.
+Login failures use rate limits and progressive backoff.
+Device binding is a risk signal, not a substitute for authentication.
+16. API Architecture and Canonical Contracts
+Success{  "success": true,  "data": {},  "meta": {    "request_id": "uuid",    "pagination": null  }}Error{  "success": false,  "error": {    "code": "TASK_STATE_CONFLICT",    "message": "The task cannot be completed from its current state.",    "details": []  },  "meta": {    "request_id": "uuid"  }}
+All application APIs use /api/v1.
+Every POST/PATCH validates a typed Pydantic request schema.
+List endpoints have a maximum page size of 100.
+Large lists use cursor pagination; small configuration lists may use page/page_size.
+Date ranges reject inverted dates and are capped at 366 days for MVP reports.
+Protected writes use Idempotency-Key unless explicitly exempted.
+ETag/If-Match is required for admin configuration objects where concurrent edits could overwrite changes.
+Backend never trusts client-supplied restaurant_id for tenant scope.
+16.1 Complete API matrix
+Auth
+Method
+Endpoint
+Permission
+Purpose
+POST
+/api/v1/auth/login
+Public
+Authenticate; issue access/refresh
+POST
+/api/v1/auth/refresh
+Refresh session
+Rotate refresh/access tokens
+POST
+/api/v1/auth/logout
+Authenticated
+Revoke current session
+POST
+/api/v1/auth/logout-all
+Authenticated
+Revoke all sessions
+GET
+/api/v1/auth/me
+Authenticated
+Current user/roles/tenant
+POST
+/api/v1/auth/change-pin
+auth.change_pin
+Change PIN
+POST
+/api/v1/auth/change-password
+auth.change_password
+Change password
+POST
+/api/v1/auth/customer/register
+Public
+Create customer account
+Restaurants
+Method
+Endpoint
+Permission
+Purpose
+GET
+/api/v1/restaurants
+restaurant.read
+List restaurants within caller scope
+GET
+/api/v1/restaurants/{id}
+restaurant.read
+Restaurant detail
+POST
+/api/v1/restaurants
+restaurant.create
+Create restaurant
+PATCH
+/api/v1/restaurants/{id}
+restaurant.update
+Update restaurant
+Users/RBAC
+Method
+Endpoint
+Permission
+Purpose
+GET
+/api/v1/users
+user.read
+List users
+POST
+/api/v1/users
+user.create
+Create user
+GET
+/api/v1/users/{id}
+user.read
+User detail
+PATCH
+/api/v1/users/{id}
+user.update
+Update user
+PATCH
+/api/v1/users/{id}/status
+user.manage
+Activate/suspend/disable
+GET
+/api/v1/users/{id}/roles
+role.read
+List user role assignments
+POST
+/api/v1/users/{id}/roles
+role.manage
+Assign role
+POST
+/api/v1/users/{id}/roles/{assignment_id}/revoke
+role.manage
+Revoke role assignment
+GET
+/api/v1/roles
+role.read
+List roles
+POST
+/api/v1/roles
+role.manage
+Create custom role
+PATCH
+/api/v1/roles/{id}
+role.manage
+Update custom role
+Task Categories
+Method
+Endpoint
+Permission
+Purpose
+GET
+/api/v1/task-categories
+task_category.read
+List categories
+POST
+/api/v1/task-categories
+task_category.manage
+Create category
+PATCH
+/api/v1/task-categories/{id}
+task_category.manage
+Update category
+Rule Sources
+Method
+Endpoint
+Permission
+Purpose
+GET
+/api/v1/rule-sources
+rule_source.read
+List sources
+POST
+/api/v1/rule-sources
+rule_source.manage
+Create source
+GET
+/api/v1/rule-sources/{id}
+rule_source.read
+Source detail
+PATCH
+/api/v1/rule-sources/{id}
+rule_source.manage
+Edit draft source metadata
+POST
+/api/v1/rule-sources/{id}/verify
+rule_source.verify
+Verify source
+POST
+/api/v1/rule-sources/{id}/retire
+rule_source.manage
+Retire source
+Safety Rules
+Method
+Endpoint
+Permission
+Purpose
+GET
+/api/v1/safety-rules
+rule.read
+List versioned rules
+POST
+/api/v1/safety-rules
+rule.manage
+Create rule version
+GET
+/api/v1/safety-rules/{id}
+rule.read
+Rule detail
+PATCH
+/api/v1/safety-rules/{id}
+rule.manage
+Create successor version; never mutate used version
+POST
+/api/v1/safety-rules/{id}/activate
+rule.activate
+Activate only if source VERIFIED
+POST
+/api/v1/safety-rules/{id}/retire
+rule.manage
+Retire rule version
+POST
+/api/v1/safety-rules/{id}/bindings
+rule.manage
+Bind to category/template
+DELETE
+/api/v1/safety-rules/{id}/bindings/{binding_id}
+rule.manage
+Remove binding
+Templates/Tasks
+Method
+Endpoint
+Permission
+Purpose
+GET
+/api/v1/task-templates
+task_template.read
+List templates
+POST
+/api/v1/task-templates
+task_template.create
+Create template
+GET
+/api/v1/task-templates/{id}
+task_template.read
+Template detail
+GET
+/api/v1/task-templates/{id}/versions
+task_template.read
+List versions
+POST
+/api/v1/task-templates/{id}/versions
+task_template.manage
+Create version
+POST
+/api/v1/task-templates/{id}/retire
+task_template.manage
+Retire template
+GET
+/api/v1/tasks
+task.read
+List tasks
+GET
+/api/v1/tasks/today
+task.read
+Today's tasks
+GET
+/api/v1/tasks/{id}
+task.read
+Task detail
+POST
+/api/v1/tasks/{id}/assign
+task.assign
+Assign/reassign
+POST
+/api/v1/tasks/{id}/start
+task.execute
+Start assigned task
+POST
+/api/v1/tasks/{id}/entries
+task.execute
+Submit entry
+Entries/Evidence
+Method
+Endpoint
+Permission
+Purpose
+GET
+/api/v1/entries/{id}
+entry.read
+Entry detail
+POST
+/api/v1/entries/{id}/resubmit
+entry.resubmit
+Correct/resubmit entry
+POST
+/api/v1/uploads/presign
+evidence.create
+Create upload target
+POST
+/api/v1/uploads/{id}/confirm
+evidence.create
+Confirm and validate object
+GET
+/api/v1/evidence/{id}
+evidence.read
+Authorized evidence metadata/download authorization
+Equipment
+Method
+Endpoint
+Permission
+Purpose
+GET
+/api/v1/equipment
+equipment.read
+List equipment
+POST
+/api/v1/equipment
+equipment.manage
+Create equipment
+GET
+/api/v1/equipment/{id}
+equipment.read
+Equipment detail
+PATCH
+/api/v1/equipment/{id}
+equipment.manage
+Update equipment
+Anomalies
+Method
+Endpoint
+Permission
+Purpose
+GET
+/api/v1/anomalies/review
+anomaly.review
+Review queue
+GET
+/api/v1/anomalies/{id}
+anomaly.review
+Anomaly detail
+POST
+/api/v1/anomalies/{id}/review
+anomaly.review
+Manager/admin review
+POST
+/api/v1/anomalies/{id}/dismiss
+anomaly.review
+Dismiss signal
+POST
+/api/v1/anomalies/{id}/escalate
+anomaly.review
+Escalate to incident
+Incidents
+Method
+Endpoint
+Permission
+Purpose
+GET
+/api/v1/incidents
+incident.read
+Incident queue
+POST
+/api/v1/incidents
+incident.create
+Create incident
+GET
+/api/v1/incidents/{id}
+incident.read
+Incident detail
+POST
+/api/v1/incidents/{id}/assign
+incident.assign
+Assign incident
+POST
+/api/v1/incidents/{id}/start
+incident.start
+Start incident work
+POST
+/api/v1/incidents/{id}/recheck
+incident.recheck
+Record recheck
+POST
+/api/v1/incidents/{id}/close
+incident.close
+Close incident
+POST
+/api/v1/incidents/{id}/reopen
+incident.reopen
+Reopen incident
+Corrective Actions
+Method
+Endpoint
+Permission
+Purpose
+GET
+/api/v1/corrective-actions
+capa.read
+CAPA queue
+POST
+/api/v1/corrective-actions
+capa.create
+Create action
+GET
+/api/v1/corrective-actions/{id}
+capa.read
+Action detail
+POST
+/api/v1/corrective-actions/{id}/start
+capa.execute
+Start action
+POST
+/api/v1/corrective-actions/{id}/complete
+capa.execute
+Complete action
+POST
+/api/v1/corrective-actions/{id}/verify
+capa.verify
+Verify resolution
+POST
+/api/v1/corrective-actions/{id}/reopen
+capa.reopen
+Reopen action
+POST
+/api/v1/corrective-actions/{id}/cancel
+capa.cancel
+Cancel action
+Suppliers/Products/Batches
+Method
+Endpoint
+Permission
+Purpose
+GET
+/api/v1/suppliers
+supplier.read
+List suppliers
+POST
+/api/v1/suppliers
+supplier.manage
+Create supplier
+GET
+/api/v1/suppliers/{id}
+supplier.read
+Supplier detail
+PATCH
+/api/v1/suppliers/{id}
+supplier.manage
+Update supplier
+GET
+/api/v1/products
+product.read
+List products
+POST
+/api/v1/products
+product.manage
+Create product
+GET
+/api/v1/products/{id}
+product.read
+Product detail
+PATCH
+/api/v1/products/{id}
+product.manage
+Update product
+GET
+/api/v1/batches
+batch.read
+List batches
+POST
+/api/v1/batches
+batch.manage
+Create batch
+GET
+/api/v1/batches/{id}
+batch.read
+Batch detail
+PATCH
+/api/v1/batches/{id}
+batch.manage
+Update batch
+POST
+/api/v1/batches/{id}/accept
+batch.manage
+Accept batch
+POST
+/api/v1/batches/{id}/reject
+batch.manage
+Reject batch
+POST
+/api/v1/batches/{id}/hold
+batch.manage
+Hold batch
+Notifications/Dashboards/Reports
+Method
+Endpoint
+Permission
+Purpose
+GET
+/api/v1/notifications
+notification.read
+Notification inbox
+PATCH
+/api/v1/notifications/{id}/read
+notification.read
+Mark notification read
+GET
+/api/v1/notification-preferences
+notification.manage
+Get preferences
+PATCH
+/api/v1/notification-preferences
+notification.manage
+Update preferences
+GET
+/api/v1/dashboards/staff
+dashboard.view
+Staff aggregate dashboard
+GET
+/api/v1/dashboards/manager
+dashboard.view
+Manager aggregate dashboard
+GET
+/api/v1/dashboards/admin
+admin.dashboard
+Admin aggregate dashboard
+GET
+/api/v1/reports/inspection-readiness
+report.read
+Inspection-readiness report
+GET
+/api/v1/reports/task-completion
+report.read
+Task completion report
+GET
+/api/v1/reports/anomaly-summary
+report.read
+Anomaly summary
+GET
+/api/v1/reports/corrective-actions
+report.read
+CAPA report
+Audit
+Method
+Endpoint
+Permission
+Purpose
+GET
+/api/v1/audit-log
+audit.read
+Scoped audit history
+GET
+/api/v1/audit-log/{id}
+audit.read
+Audit detail
+GET
+/api/v1/audit-log/export
+audit.read
+Bounded JSON/CSV export
+Verification
+Method
+Endpoint
+Permission
+Purpose
+GET
+/api/v1/verification
+verification.read
+Current verification
+POST
+/api/v1/verification
+verification.submit
+Start/resubmit verification
+GET
+/api/v1/verification/{id}
+verification.read
+Verification detail
+POST
+/api/v1/verification/{id}/documents
+verification.submit
+Attach document
+POST
+/api/v1/verification/{id}/submit
+verification.submit
+Submit for review
+GET
+/api/v1/admin/verifications
+verification.review
+Admin review queue
+GET
+/api/v1/admin/verifications/{id}
+verification.review
+Admin verification detail
+POST
+/api/v1/admin/verifications/{id}/approve
+verification.review
+Approve
+POST
+/api/v1/admin/verifications/{id}/reject
+verification.review
+Reject
+POST
+/api/v1/admin/verifications/{id}/request-evidence
+verification.review
+Request more evidence
+Public/Customer/Profile/Official Records
+Method
+Endpoint
+Permission
+Purpose
+GET
+/api/v1/public/businesses
+public.read
+Browse public businesses
+GET
+/api/v1/public/businesses/{id}/profile
+public.read
+Public profile
+GET
+/api/v1/public-profile-settings
+public_profile.manage
+Get profile settings
+PATCH
+/api/v1/public-profile-settings
+public_profile.manage
+Update profile settings
+GET
+/api/v1/customer/follows
+customer.follow
+List followed businesses
+POST
+/api/v1/customer/follows/{restaurant_id}
+customer.follow
+Follow business
+DELETE
+/api/v1/customer/follows/{restaurant_id}
+customer.follow
+Unfollow business
+GET
+/api/v1/admin/restaurants/{restaurant_id}/official-records
+official_record.read
+List official records
+POST
+/api/v1/admin/restaurants/{restaurant_id}/official-records
+official_record.manage
+Create record
+PATCH
+/api/v1/admin/official-records/{id}
+official_record.manage
+Update record
+POST
+/api/v1/admin/official-records/{id}/verify
+official_record.verify
+Verify record
+POST
+/api/v1/admin/official-records/{id}/retire
+official_record.manage
+Retire record
+Health
+Method
+Endpoint
+Permission
+Purpose
+GET
+/health
+Public
+Liveness
+GET
+/ready
+Public
+Readiness
+17. Critical API Contracts
+17.1 Entry submission
+POST /api/v1/tasks/{task_id}/entriesAuthorization: Bearer <access-token>Idempotency-Key: <uuid>{  "value_numeric": 4.2,  "value_text": null,  "value_jsonb": null,  "unit": "C",  "equipment_id": "<uuid>",  "evidence_file_id": "<uuid>"}
+Authenticate and validate session.
+Authorize task assignment and tenant scope.
+Resolve immutable task/template version.
+Validate task state and submission window.
+Validate value, unit and equipment.
+Validate evidence ownership, purpose, status, hash, size and type.
+Acquire idempotency record.
+Persist entry in transaction.
+Evaluate deterministic safety rules and persist entry_safety_evaluations.
+Run anomaly analysis when history is sufficient.
+Persist anomaly result or analysis unavailable status.
+Create incident/CAPA if configured.
+Write audit event(s) and outbox event(s).
+Commit and return stable DTO.
+201{  "success": true,  "data": {    "entry_id": "<uuid>",    "task_id": "<uuid>",    "safety_status": "NORMAL",    "trust_level": "EVIDENCE_SUPPORTED",    "anomaly": {      "decision": "NO_FLAG",      "risk_level": "LOW",      "reasons": []    }  },  "meta": {"request_id": "<uuid>", "pagination": null}}
+17.2 Upload confirmation
+Verify upload belongs to authorized tenant/purpose/uploader.
+HEAD object and validate object existence.
+Read enough bytes for magic-byte validation.
+Verify declared MIME against detected MIME.
+Verify size against metadata and configured limit.
+Compute/verify SHA-256.
+Reject executable/archive types and invalid images.
+Mark evidence AVAILABLE.
+17.3 Idempotency replay
+Same authenticated user + same Idempotency-Key + same canonical request → original response replay.
+Same key + different request hash → 409 IDEMPOTENCY_KEY_REUSE.
+No duplicate entry, incident, audit or notification side effects.
+18. Frontend Architecture
+React feature-oriented architecture. TanStack Query owns server state. Forms use React Hook Form + Zod. Small global state is reserved for authentication/session or genuinely cross-cutting UI state.
+Route
+Role
+Purpose
+/login
+Public
+Authentication
+/customer/register
+Public
+Optional customer registration
+/staff/dashboard
+Staff
+Today's workload
+/staff/tasks
+Staff
+Task queue
+/staff/tasks/:id
+Staff
+Task execution/evidence
+/staff/history
+Staff
+Recent entries/trust levels
+/staff/notifications
+Staff
+Alerts
+/manager/dashboard
+Manager
+Operational overview
+/manager/tasks
+Manager
+Task monitoring
+/manager/equipment
+Manager
+Equipment master
+/manager/incidents
+Manager
+Exception queue
+/manager/corrective-actions
+Manager
+CAPA queue
+/manager/suppliers
+Manager
+Supplier/product/batch records
+/manager/verification
+Manager
+Business verification
+/manager/audit
+Manager
+Restaurant audit history
+/manager/reports
+Manager
+Operational reports
+/admin/dashboard
+Admin
+Platform overview
+/admin/restaurants
+Admin
+Restaurant management
+/admin/users
+Admin
+User management
+/admin/roles
+Admin
+Roles/permissions
+/admin/task-templates
+Admin
+Templates
+/admin/task-categories
+Admin
+Task categories
+/admin/rule-sources
+Admin
+Verified rule-source catalogue
+/admin/safety-rules
+Admin
+Rule configuration
+/admin/verifications
+Admin
+Verification queue
+/admin/anomalies
+Admin
+Record-integrity review
+/admin/audit
+Admin
+Platform audit/security
+/admin/official-records
+Admin
+Official record management
+/admin/public-profile
+Admin
+Public profile settings
+/admin/reports
+Admin
+Reports
+/businesses
+Public
+Business search
+/businesses/:id
+Public
+Business profile
+18.1 Component inventory
+Component
+Purpose
+AppShell
+Role-independent shell/navigation host.
+ProtectedRoute
+Client UX guard only.
+RoleGate
+Conditional UI only; never a security boundary.
+DataTable
+Sorting/filtering/pagination.
+StatusBadge
+Consistent state presentation.
+TaskCard
+Staff task summary.
+TaskExecutionForm
+Value/evidence submission.
+EvidenceUploader
+Photo selection/preview/validation.
+EquipmentSelector
+Applicable equipment selection.
+AnomalyBanner
+Review signal and explanation.
+IncidentTimeline
+Incident lifecycle.
+CorrectiveActionPanel
+CAPA lifecycle and verification.
+DashboardKpiCard
+Summary metric.
+RiskChart
+Trend visualization.
+VerificationReviewPanel
+Admin verification decision workflow.
+AuditLogTable
+Append-only audit history.
+EmptyState
+No-data UX.
+ErrorState
+Retry/support UX.
+LoadingSkeleton
+Loading UX.
+19. Canonical Repository and File Structure
+bharat-foodsafe/├── frontend/│   ├── src/│   │   ├── app/│   │   ├── layouts/│   │   ├── pages/│   │   │   ├── auth/│   │   │   ├── staff/│   │   │   ├── manager/│   │   │   ├── admin/│   │   │   └── public/│   │   ├── features/│   │   │   ├── auth/│   │   │   ├── dashboard/│   │   │   ├── tasks/│   │   │   ├── entries/│   │   │   ├── evidence/│   │   │   ├── equipment/│   │   │   ├── safety-rules/│   │   │   ├── anomalies/│   │   │   ├── incidents/│   │   │   ├── corrective-actions/│   │   │   ├── suppliers/│   │   │   ├── products/│   │   │   ├── batches/│   │   │   ├── verification/│   │   │   ├── notifications/│   │   │   ├── reports/│   │   │   └── public/│   │   ├── services/api/│   │   ├── components/│   │   ├── hooks/│   │   ├── store/│   │   ├── types/│   │   ├── utils/│   │   └── styles/│   ├── tests/│   ├── package.json│   ├── package-lock.json│   ├── tsconfig.json│   ├── vite.config.ts│   ├── .env.example│   └── Dockerfile├── backend/│   ├── app/│   │   ├── main.py│   │   ├── core/│   │   ├── api/v1/│   │   ├── modules/│   │   ├── jobs/│   │   └── shared/│   ├── migrations/│   ├── tests/│   ├── pyproject.toml│   ├── uv.lock│   ├── .env.example│   └── Dockerfile├── ml/│   ├── data/│   ├── training/│   ├── features/│   ├── models/│   └── README.md├── database/seeds/├── docs/├── scripts/├── infra/├── .github/workflows/├── README.md├── SECURITY.md└── LICENSE
+19.1 Backend module contract
+app/modules/<domain>/├── model.py        # SQLAlchemy persistence models├── schema.py       # Pydantic request/response DTOs├── repository.py   # DB access only├── service.py      # business workflow + transaction boundary├── policies.py     # optional domain policy└── engine.py       # only where deterministic/ML engine exists
+Router → service only.
+Service → repository/other services.
+Repository → database only.
+Models never leak through API responses.
+Cross-domain calls use service interfaces.
+20. Frontend ↔ Backend API Synchronization Contract
+Frontend API client
+Backend route group
+Owner
+auth.ts
+/auth/*
+auth
+dashboards.ts
+/dashboards/*
+dashboards
+restaurants.ts
+/restaurants/*
+restaurants
+users.ts
+/users/*
+users
+roles.ts
+/roles/*
+roles
+task-categories.ts
+/task-categories/*
+task categories
+task-templates.ts
+/task-templates/*
+tasks
+tasks.ts
+/tasks/*
+tasks
+entries.ts
+/entries/*
+entries
+uploads.ts
+/uploads/*
+evidence
+evidence.ts
+/evidence/*
+evidence
+equipment.ts
+/equipment/*
+equipment
+rule-sources.ts
+/rule-sources/*
+rule sources
+safety-rules.ts
+/safety-rules/*
+safety rules
+anomalies.ts
+/anomalies/*
+anomaly
+incidents.ts
+/incidents/*
+incidents
+corrective-actions.ts
+/corrective-actions/*
+corrective actions
+suppliers.ts
+/suppliers/*
+suppliers
+products.ts
+/products/*
+products
+batches.ts
+/batches/*
+batches
+verification.ts
+/verification/*
+verification
+notifications.ts
+/notifications/* + /notification-preferences
+notifications
+reports.ts
+/reports/*
+reports
+audit.ts
+/audit-log*
+audit
+public.ts
+/public/* + /customer/follows
+public/customer
+public-profile.ts
+/public-profile-settings
+public profile settings
+official-records.ts
+/admin/.../official-records*
+official records
+Every frontend service method must map to an OpenAPI operation.
+Every protected route must have a page and role guard.
+API response types must match the backend DTO contract.
+No duplicate hand-written DTO shapes where generated contract types are practical.
+21. Canonical End-to-End Data Flows
+21.1 Staff entry flow
+GET /tasks/today→ open task→ POST /tasks/{id}/start→ enter value/checklist→ POST /uploads/presign→ upload to object storage→ POST /uploads/{id}/confirm→ POST /tasks/{id}/entries→ verify assignment/state/evidence/value/equipment→ deterministic Safety Rules Engine→ entry_safety_evaluations→ Record-Integrity Engine→ trust/result calculation→ incident/CAPA if needed→ audit + outbox→ COMMIT→ response
+21.2 Critical deviation flow
+Entry→ Safety Rules = CRITICAL→ entry.safety_status = CRITICAL→ Incident OPEN→ CAPA OPEN→ manager notification via outbox→ corrective action→ recheck→ verification→ incident CLOSED→ audit timeline
+21.3 Suspicious record flow
+Entry→ Safety Rules = NORMAL→ Anomaly = REVIEW→ record is NOT declared unsafe→ manager reviews→ accept / request recheck / escalate→ decision audited
+21.4 Public profile flow
+Public request→ is_public check→ allow-list aggregate query→ exclude employees/raw evidence/internal notes→ include freshness + disclaimer→ return PublicProfileDTO
+21.5 Verification flow
+Manager submits business metadata→ upload validation→ verification document association→ optional OCR adapter→ consistency checks→ confidence→ VERIFIED / NEEDS_MANUAL_REVIEW / MORE_EVIDENCE / REJECTED→ admin decision where required→ audit
+22. Supplier, Product and Receiving Scope
+Supplier  ↓Product  ↓Batch received  ↓Quantity + batch number + expiry + received_at  ↓Optional receiving evidence  ↓PENDING → ACCEPTED / REJECTED / HOLD
+Included: supplier master, product master, batch traceability, expiry tracking, basic receiving status and optional receiving evidence.
+Excluded: purchase orders, invoice OCR, full inventory management, multi-tier supply chain.
+23. Public Profile and Official Records
+Public profile is an operational-transparency artifact.
+Only explicitly approved aggregate data is published.
+Raw employee records, raw evidence, internal notes and private storage keys are never public.
+Public profile shows freshness timestamp and a clear non-certification disclaimer.
+official_records may be displayed only when independently verified and never imply that Bharat FoodSafe issued the official status.
+24. Security and Threat Model
+Threat
+Control
+Required test
+IDOR / tenant escape
+TenantContext + scoped repositories + referenced-object tenant checks
+Cross-tenant suite
+Credential stuffing
+Rate limit + progressive backoff + account status
+AUTH abuse suite
+Refresh-token theft
+Rotation + family revocation + reuse detection
+Token reuse test
+Malicious upload
+Size/MIME/magic-byte/hash validation + object isolation
+UPLOAD-01/02
+XSS
+React escaping + output encoding + CSP where hosted
+XSS suite
+CSRF
+Bearer API header; SameSite if cookies are used
+CSRF suite
+SQL injection
+SQLAlchemy parameterization
+SQL injection suite
+Sensitive logging
+Redaction middleware + audit sanitizer
+LOG suite
+Public data leakage
+Allow-list DTO + public service
+PUBLIC-01
+Privilege escalation
+Server-side permission checks
+RBAC suite
+Audit tampering
+Append-only service + DB write-path controls + hash chain
+AUDIT integrity suite
+25. Testing Strategy and Mandatory Architecture CI
+Layer
+Tool
+Coverage
+Backend unit
+Pytest
+Services, rules, state machines, feature extraction.
+Backend API
+Pytest + HTTPX
+Auth, permissions, validation, response envelopes.
+Database integration
+Pytest + PostgreSQL
+Constraints, transactions, tenant isolation, idempotency.
+Frontend unit
+Vitest + RTL
+Forms, components, route guards, errors.
+E2E
+Playwright
+Staff entry → anomaly/incident → manager resolution.
+ML
+Pytest + scikit-learn
+Synthetic/adversarial data and evaluation metrics.
+Security
+Automated + manual
+RBAC, IDOR, uploads, rate limits, session revocation.
+CI
+GitHub Actions
+Lint, typecheck, tests, build, migration and security checks.
+25.1 Mandatory architecture consistency tests
+Check
+Automated validation
+Frontend API ↔ OpenAPI
+Every frontend service method maps to an OpenAPI operation.
+Permission ↔ endpoint
+Every protected operation declares a permission and backend dependency.
+DTO ↔ response
+Every response has a serializable typed DTO.
+DB model ↔ migration
+SQLAlchemy model columns match migration schema.
+Repository ↔ DB
+Repository references only existing tables/columns.
+Routes ↔ pages
+Every protected route has a page and role guard.
+State machine
+Illegal transitions return 409 and have tests.
+Tenant isolation
+Cross-restaurant fixtures cannot access protected records.
+Idempotency
+Every retryable mutation has duplicate-request tests.
+Audit
+Every auditable mutation produces required audit events.
+Outbox
+Every critical event-producing mutation creates exactly one deduped outbox event.
+Rule activation
+Unverified source cannot activate a safety rule.
+26. Core Test Case Matrix
+ID
+Scenario
+Expected result
+AUTH-01
+Valid staff login
+Access token issued; dashboard accessible.
+AUTH-02
+Invalid PIN
+401; no token; security audit event.
+AUTH-03
+Revoked refresh session
+401; session remains unusable.
+AUTH-04
+Cross-tenant manager task access
+403/404; no data leak.
+ROLE-01
+Assign role
+Assignment created and audited.
+ROLE-02
+Revoke role
+revoked_at set; historical row retained.
+TASK-01
+Assigned task list
+Only permitted tasks returned.
+TASK-02
+Overdue job
+Task becomes OVERDUE exactly once.
+TASK-03
+Duplicate generation
+Scheduler twice → one occurrence.
+ENTRY-01
+Valid evidence
+Entry saved and evaluated.
+ENTRY-02
+Missing required evidence
+422.
+ENTRY-03
+Duplicate submit
+Single business result.
+ENTRY-04
+Same key/different body
+409 IDEMPOTENCY_KEY_REUSE.
+RULE-01
+Critical threshold
+CRITICAL + incident.
+RULE-02
+Historical rule
+Old entry retains old rule/source/version/result.
+RULE-03
+Unverified source activation
+Activation rejected.
+UPLOAD-01
+Bad file
+Rejected.
+UPLOAD-02
+Oversize file
+Rejected.
+UPLOAD-03
+Expired orphan upload
+Marked ORPHANED and cleaned by policy.
+ANOM-01
+Repeated values
+Review flag with explanation.
+ANOM-02
+Legitimate consistency
+No excessive false positive.
+ANOM-03
+Model failure
+analysis_status=UNAVAILABLE; safety result unchanged.
+INC-01
+Illegal incident transition
+409.
+CAPA-01
+Complete + verify
+VERIFIED and audited.
+CAPA-02
+Failed recheck
+REOPENED.
+OUTBOX-01
+Worker crash during PROCESSING
+Lease expires and row returns to PENDING.
+OUTBOX-02
+Duplicate event
+Unique dedupe prevents duplicate notification.
+AUDIT-01
+Mutation audit
+Required event exists.
+AUDIT-02
+Audit update/delete
+No application route; denied.
+AUDIT-03
+Concurrent audit writes
+Chain remains unbroken.
+VER-01
+High confidence verification
+VERIFIED.
+VER-02
+Borderline confidence
+NEEDS_MANUAL_REVIEW.
+PUBLIC-01
+Public privacy
+No employee/raw evidence/internal notes.
+SEC-01
+IDOR
+Cross-tenant access impossible.
+27. ML Model Promotion and Evaluation Contract
+Stage
+Required output
+Promotion rule
+Dataset generation
+Versioned synthetic normal + adversarial dataset; dataset hash
+Dataset version recorded.
+Feature engineering
+Frozen feature schema + missing-value policy
+Schema frozen for evaluation.
+Baseline
+z/IQR scores + legitimate-consistency test
+Baseline metrics recorded.
+Isolation Forest
+Artifact + parameters
+Reproducible artifact.
+Evaluation
+Precision, recall, F1, false-positive rate, confusion matrix
+Metrics reviewed against approved project thresholds.
+Error analysis
+False-positive/false-negative examples
+Known failure modes documented.
+Release
+model_version + artifact hash + threshold
+Only approved model becomes active.
+No universal accuracy target is assumed by architecture; project owner approves targets after baseline experiments.
+Synthetic labels are separated from real operational labels.
+No automatic retraining from manager decisions in MVP.
+Model failure never changes deterministic CRITICAL safety results.
+Anomaly reasons are generated from the same feature set used for scoring.
+28. DevOps, Local Development and Deployment
+28.1 CI/CD
+Pull Request→ install→ lint→ typecheck→ backend unit/API tests→ frontend tests→ build→ migration validation→ dependency/security checks→ merge→ production build→ deploy→ health/readiness check
+Migration rule: CI must not run destructive production migrations. Production migrations are controlled release steps with backup and rollback planning.
+28.2 Local setup
+Install Git, Node.js compatible with Vite 8, Python 3.13.x and PostgreSQL 18.x, or use Docker for PostgreSQL.
+Clone the repository.
+Copy backend/.env.example to backend/.env and frontend/.env.example to frontend/.env.
+Create the PostgreSQL database.
+Create and activate backend/.venv.
+Install locked backend dependencies.
+Run alembic upgrade head.
+Run deterministic seeds.
+Install frontend dependencies with npm ci.
+Start FastAPI with Uvicorn.
+Start Vite frontend.
+Run unit/API tests before feature development.
+git clone <repository>cd bharat-foodsafecd backendpython -m venv .venv# activate .venvpip install -e ".[dev]"alembic upgrade headpython -m database.seeds.rolespython -m database.seeds.permissionspython -m database.seeds.demo_restaurantpython -m database.seeds.demo_userspython -m database.seeds.demo_equipmentpython -m database.seeds.demo_rulespython -m database.seeds.demo_tasksuvicorn app.main:app --reload# new terminalcd frontendnpm cinpm run dev
+28.3 Deployment topology
+User Browser    ↓Static Frontend / CDN    ↓ HTTPSFastAPI Application    ├── PostgreSQL    ├── Object Storage    └── Optional Email/SMS          ↑     Single Scheduler/Job Runner
+Initial deployment uses one backend instance or a topology with a single scheduler.
+If multiple API replicas are introduced, scheduled jobs move to a dedicated worker/queue or a distributed-lock design.
+Production uses HTTPS, managed secrets and managed PostgreSQL where practical.
+Object storage lifecycle rules must be configured for evidence retention.
+29. Environment Configuration Contract
+# backend/.envAPP_ENV=developmentAPP_NAME=BharatFoodSafeAPP_VERSION=0.1.0DATABASE_URL=postgresql+psycopg://foodsafety:password@localhost:5432/bharat_foodsafeJWT_SECRET=<secret>JWT_ACCESS_TTL_MINUTES=15JWT_REFRESH_TTL_DAYS=7CORS_ORIGINS=http://localhost:5173STORAGE_PROVIDER=localLOCAL_STORAGE_PATH=./uploadsS3_ENDPOINT=S3_BUCKET=S3_REGION=S3_ACCESS_KEY=S3_SECRET_KEY=MAX_UPLOAD_MB=10PUBLIC_PROFILE_ENABLED=falseAUDIT_RETENTION_DAYS=LOG_LEVEL=INFORATE_LIMIT_LOGIN_PER_MINUTE=5RATE_LIMIT_UPLOAD_PER_MINUTE=20TASK_GENERATION_LOOKAHEAD_DAYS=1ANOMALY_MIN_HISTORY=30ANOMALY_REVIEW_THRESHOLD=0.70# frontend/.envVITE_API_BASE_URL=http://localhost:8000/api/v1VITE_APP_NAME=BharatFoodSafe
+Secret rule: JWT secrets, database passwords and object-storage credentials must never be committed to source control.
+30. Retention, Logging, Monitoring and SLO Baseline
+Data
+Policy
+Audit log
+Long-term; exact duration set by deployment policy; append-only.
+Entries
+Long-term operational history; archive/status, no hard delete.
+Evidence
+Configurable business retention; object lifecycle + metadata soft-delete.
+Auth sessions
+Until expiry + cleanup grace period.
+Idempotency keys
+Until expiry + scheduled cleanup.
+Notifications
+Configurable read/archive/cleanup policy.
+Abandoned uploads
+Short operational window; cleanup job.
+ML artifacts
+Versioned release history; never overwrite active artifact.
+Signal
+Starting target
+Alert
+API 5xx rate
+<1% over 5 minutes
+Yes
+p95 normal API latency
+<500 ms excluding exports/uploads
+Yes
+Task-generation failures
+0 critical failures
+Yes
+Notification retry backlog
+No sustained backlog
+Yes
+Upload rejection rate
+Monitor baseline; sudden spike alerts
+Yes
+DB connection pool
+<80% utilization
+Yes
+Anomaly inference failure
+0 unhandled; fallback to unavailable
+Yes
+Verification queue age
+Within configured business target
+Yes
+31. File Responsibility Matrix
+File
+Responsibility
+Direct dependencies
+backend/app/main.py
+FastAPI app, middleware, exception handlers, router registration
+core + api
+backend/app/core/tenant.py
+Derive TenantContext and enforce tenant scope
+users/services
+backend/app/core/permissions.py
+Resolve role/permission checks
+roles
+backend/app/core/idempotency.py
+Persistent request-key lock/replay
+idempotency_keys
+backend/app/core/audit.py
+Transactional audit writer + hash chain
+audit_log + request context
+backend/app/api/v1/entries.py
+HTTP boundary for entry submission
+entries.service
+backend/app/api/v1/anomalies.py
+Review queue/detail/review/dismiss/escalate
+anomaly.service
+backend/app/api/v1/dashboards.py
+Role-specific aggregate DTO endpoints
+dashboards.service
+backend/app/api/v1/reports.py
+Report query/export endpoints
+reports.service
+backend/app/modules/tasks/service.py
+Task lifecycle, scheduler, assignments
+task repository + rules
+backend/app/modules/entries/service.py
+Entry transaction and engine orchestration
+evidence + rules + anomaly + incidents
+backend/app/modules/evidence/storage.py
+Object key generation, verification, lifecycle
+object storage
+backend/app/modules/safety_rules/engine.py
+Pure deterministic rule evaluation
+rule schemas
+backend/app/modules/anomaly/features.py
+Record-integrity features
+entries/history
+backend/app/modules/anomaly/inference.py
+Frozen model inference
+model artifact
+backend/app/modules/anomaly/policy.py
+Cold-start and decision mapping
+model result
+backend/app/modules/notifications/service.py
+Notification creation and delivery orchestration
+preferences/providers
+backend/app/modules/reports/exporters.py
+CSV/PDF generation
+report DTOs
+backend/app/jobs/generate_tasks.py
+Idempotent recurring task generation
+tasks.service
+backend/app/jobs/mark_overdue.py
+Overdue state transitions
+tasks.service
+backend/app/jobs/send_notifications.py
+Retry external delivery
+notifications.service
+backend/app/jobs/recover_outbox.py
+Recover expired PROCESSING outbox leases
+outbox_events
+backend/app/jobs/cleanup_uploads.py
+Clean abandoned/expired evidence objects
+evidence.storage
+32. Master Traceability Matrix
+Feature
+Requirement
+Frontend
+API
+Backend
+DB
+Tests
+Authentication
+FR-01
+auth pages
+/auth/*
+auth.service
+users/auth_sessions
+AUTH-*
+RBAC/Tenant
+FR-02/03
+role/user pages
+/users/* /roles/*
+users/roles services
+roles/permissions/user_roles
+ROLE-/SEC-*
+Task templates
+FR-04
+admin template pages
+/task-templates/*
+tasks.service
+task_templates/versions
+TASK-*
+Recurring tasks
+FR-05
+task queue
+internal job
+tasks.service
+tasks
+TASK-02/03
+Entry
+FR-06/07/08
+task execution
+/tasks/{id}/entries
+entries.service
+entries/evidence/rule evaluations
+ENTRY-/RULE-*
+Anomaly
+FR-09
+review pages
+/anomalies/*
+anomaly.service
+anomaly_results/model_versions
+ANOM-*
+Incident/CAPA
+FR-10/11
+manager queues
+/incidents/* /corrective-actions/*
+incident/CAPA services
+incidents/corrective_actions
+INC-/CAPA-*
+Audit
+FR-12
+audit pages
+/audit-log*
+audit.service
+audit_log
+AUDIT-*
+Verification
+FR-13
+verification pages
+/verification/*
+verification.service
+business_verifications/documents
+VER-*
+Notifications
+FR-14
+notification UI
+/notifications*
+notification.service
+notifications/preferences/outbox
+OUTBOX-*
+Reports
+FR-15
+report pages
+/reports/*
+reports.service
+aggregate queries
+REPORT-*
+Public profile
+FR-16
+business pages
+/public/businesses/*
+public.service
+public_profile_settings/official_records
+PUBLIC-*
+Equipment
+FR-17
+equipment pages
+/equipment/*
+equipment.service
+equipment
+EQUIP-*
+Idempotency
+FR-18
+API client
+all retryable writes
+core.idempotency
+idempotency_keys
+ENTRY-03/04
+Sessions
+FR-19
+auth state
+/auth/*
+auth.service
+auth_sessions
+AUTH-03/04
+Rule catalogue
+FR-20
+admin rule source pages
+/rule-sources/* /safety-rules/*
+safety_rules.service
+rule_sources/safety_rules/bindings
+RULE-03
+33. Build Order — Locked
+Stage
+Work
+Dependency
+1
+Repository + environment bootstrap
+None
+2
+PostgreSQL + Alembic + 37-table schema
+1
+3
+Auth + persisted sessions
+2
+4
+RBAC + TenantContext + permission enforcement
+3
+5
+Restaurants + users + role assignment
+4
+6
+Task categories
+5
+7
+Task templates + immutable versions
+6
+8
+Equipment
+7
+9
+Scheduler + occurrence_key idempotency
+8
+10
+Task assignment + execution state machine
+9
+11
+Evidence storage + upload lifecycle
+10
+12
+Entries + entry safety evaluation history
+11
+13
+Rule sources + safety rules + bindings
+12
+14
+Incident workflow
+13
+15
+CAPA workflow
+14
+16
+Audit hash chain + verification utility
+15
+17
+Record-integrity anomaly engine
+16
+18
+Notifications + outbox + recovery
+17
+19
+Staff dashboard
+18
+20
+Manager dashboard
+19
+21
+Reports
+20
+22
+Supplier/product/batch lifecycle
+21
+23
+Verification + Phase-2 OCR adapter
+22
+24
+Full Admin UI
+23
+25
+Public profile + customer follows
+24
+26
+Security tests + architecture consistency tests
+25
+27
+E2E + performance tests
+26
+28
+Deployment + migration rehearsal + rollback test
+27
+34. Feature Definition of Done
+Gate
+Required
+Requirement
+Product requirement ID and acceptance criteria linked.
+Frontend
+Route/page/component plus loading, empty, error and responsive states.
+API
+Endpoint, DTO, permission, error contract and OpenAPI description.
+Backend
+Service, repository, transaction and domain validation complete.
+Database
+Migration, constraints and indexes complete.
+Security
+Authorization, tenant isolation and input/file validation tested.
+Audit
+Required audit events implemented.
+Notifications
+Required events, dedupe and preferences handled.
+Testing
+Unit + API/integration + E2E coverage for critical path.
+Documentation
+Relevant docs and ADR updated.
+Deployment
+Build and migration validated in CI/rehearsal.
+Review
+No TODO changes architecture without ADR/scope amendment.
+35. Production Gates — Cannot Be Faked by Documentation
+Verify and approve the applicable safety-rule catalogue from authoritative sources.
+Run all automated tests against PostgreSQL.
+Run security tests including tenant isolation, authentication abuse and upload abuse.
+Evaluate the anomaly model against frozen synthetic/adversarial datasets and document metrics.
+Configure production secrets and object storage.
+Configure and document data-retention policy.
+Configure monitoring and alerts.
+Run production migration rehearsal and rollback test.
+Perform end-to-end acceptance of the core assurance loop.
+Final distinction: Architecture-ready means the developer does not need to invent architecture. Production-ready requires successful implementation and validation of these gates.
+36. Developer Contract / Change Control
+No feature enters implementation without classification as Core, Phase 1, Phase 2, Phase 3, Future or Rejected.
+Every feature must map Requirement → UI → API → Backend → Database → Authorization → Validation → Tests.
+No API is added without a consuming feature.
+No table is added without a documented business purpose.
+No dependency is added without a documented reason.
+No regulatory threshold is hard-coded without a verified RuleSource.
+No ML output may be described as proof of fraud.
+No public endpoint may expose raw employee evidence or internal notes.
+No tenant-scoped query may bypass central scope policy.
+No destructive production migration without an approved release plan.
+No IoT dependency enters the current implementation without an explicit scope amendment.
+Architectural changes require an ADR or scope amendment before code changes.
+37. v1.5 Final Architecture Validation
+Validation item
+v1.5 result
+Product boundary clear
+PASS
+Sensor-free architecture locked
+PASS
+One backend architecture
+PASS
+One frontend architecture
+PASS
+One 37-table database model
+PASS
+Historical rule evaluation preserved
+PASS
+Task template configuration has one canonical owner
+PASS
+RBAC persistence + assignment/revocation complete
+PASS
+Tenant isolation rules explicit
+PASS
+Safety rules source verification gate explicit
+PASS
+Rule bindings validated despite polymorphic target
+PASS
+Evidence orphan lifecycle complete
+PASS
+Persistent concurrent idempotency complete
+PASS
+Audit hash-chain concurrency defined
+PASS
+Transactional outbox crash recovery defined
+PASS
+Notification deduplication defined
+PASS
+Incident commands complete
+PASS
+CAPA commands complete
+PASS
+Public profile settings API complete
+PASS
+Official records management API complete
+PASS
+Rule source management API complete
+PASS
+Restaurant list API complete
+PASS
+Supplier/product/batch lifecycle complete
+PASS
+Audit export defined
+PASS
+Frontend API mapping synchronized
+PASS
+Standard response envelope unique and consistent
+PASS
+No generic workflow status PATCH
+PASS
+ML failure cannot override deterministic safety
+PASS
+No unnecessary Redis/Kafka/Kubernetes dependency
+PASS
+Folder/file architecture explicit
+PASS
+Build order explicit
+PASS
+Testing/CI architecture checks explicit
+PASS
+Production gates explicitly separated from architecture readiness
+PASS
+38. Final Status and Coding Lock
+ARCHITECTURE STATUS: BUILD-LOCKED
+v1.5 is the single implementation source of truth. Earlier v1.1, v1.2 and v1.4 sections are superseded wherever they conflict with this document. Developers should not create parallel database models, duplicate API contracts, alternate workflow states, or new architecture layers outside this specification.
+The project is now ready to begin coding against the locked contracts. The remaining work is implementation and validation, not architecture invention.
+Application version: Start implementation at application release 0.1.0 (or another explicitly chosen release version). Do not use the architecture document version as the application runtime version.
+39. Pre-Coding Quick Checklist
+☐ Repository created with canonical folders.
+☐ PostgreSQL database available.
+☐ Alembic initialized.
+☐ 37-table schema migration written from Section 7.
+☐ Seed roles and permissions defined.
+☐ TenantContext implemented.
+☐ Idempotency core implemented.
+☐ Audit chain utility implemented with advisory lock.
+☐ Outbox worker/recovery implemented.
+☐ OpenAPI generated from typed DTOs.
+☐ Frontend API client list matches Section 20.
+☐ State machines implemented as command methods.
+☐ RuleSource verification gate implemented.
+☐ Entry safety evaluation history implemented.
+☐ Evidence lifecycle/cleanup implemented.
+☐ Architecture consistency CI checks enabled.
+☐ Only then begin feature implementation in Section 33 order.
+40. Source and Review Basis
+This v1.5 document is a consolidated correction of the supplied Bharat FoodSafe v1.4 Final Engineering Master Specification. The v1.4 document was reviewed section-by-section for database, API, state-machine, evidence, idempotency, audit, outbox, folder/file and frontend/backend consistency. The v1.5 corrections in Section 3 are binding.
+Reference reviewed: Bharat_FoodSafe_Final_Engineering_Specification_v1_4_FINAL_ARCHITECTURE.docx
+Review outcome: The previously identified architecture issues are incorporated into one consolidated specification instead of being left as append-only amendments.
