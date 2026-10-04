@@ -1,22 +1,82 @@
 import React from 'react';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { LoginPage } from './features/auth/LoginPage';
+import { StaffDashboard } from './features/dashboard/StaffDashboard';
+import { ManagerDashboard } from './features/dashboard/ManagerDashboard';
+import { AdminDashboard } from './features/dashboard/AdminDashboard';
+import { Skeleton } from './components/ui/Skeleton';
+
+const DefaultRedirect: React.FC = () => {
+  const { user, isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6" aria-busy="true">
+        <Skeleton className="h-12 w-64 rounded-xl" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user.roles.includes('PLATFORM_ADMIN')) {
+    return <Navigate to="/admin/dashboard" replace />;
+  } else if (user.roles.includes('MANAGER')) {
+    return <Navigate to="/manager/dashboard" replace />;
+  } else {
+    return <Navigate to="/staff/dashboard" replace />;
+  }
+};
+
+export const AppRoutes: React.FC = () => {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+
+      <Route
+        path="/staff/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={['STAFF', 'MANAGER', 'PLATFORM_ADMIN']}>
+            <StaffDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/manager/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={['MANAGER', 'PLATFORM_ADMIN']}>
+            <ManagerDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={['PLATFORM_ADMIN']}>
+            <AdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route path="/" element={<DefaultRedirect />} />
+      <Route path="*" element={<DefaultRedirect />} />
+    </Routes>
+  );
+};
 
 export const App: React.FC = () => {
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
-      <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center font-black text-2xl mb-4 shadow-sm">
-        FS
-      </div>
-      <h1 className="text-3xl font-extrabold text-slate-900 mb-2">
-        Bharat FoodSafe
-      </h1>
-      <p className="text-slate-600 max-w-md mb-6">
-        Digital Food-Safety Operational Assurance & Compliance Platform. Initial project foundation established.
-      </p>
-      <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-full text-xs font-bold border border-emerald-200">
-        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-        Step 1.1 Foundation Initialized
-      </div>
-    </div>
+    <BrowserRouter>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </BrowserRouter>
   );
 };
 
