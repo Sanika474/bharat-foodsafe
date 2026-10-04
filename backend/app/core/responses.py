@@ -1,5 +1,6 @@
 import uuid
 from typing import Any
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 
@@ -20,7 +21,7 @@ def success_response(
         "data": data,
         "meta": meta_dict,
     }
-    return JSONResponse(status_code=status_code, content=payload)
+    return JSONResponse(status_code=status_code, content=jsonable_encoder(payload))
 
 
 def error_response(
@@ -42,4 +43,4 @@ def error_response(
             "request_id": req_id,
         },
     }
-    return JSONResponse(status_code=status_code, content=payload)
+    return JSONResponse(status_code=status_code, content=jsonable_encoder(payload))
