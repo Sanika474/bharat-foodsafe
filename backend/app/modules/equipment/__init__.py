@@ -1,0 +1,1 @@
+# Equipment Master module package
