@@ -33,7 +33,7 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
           </h3>
           <button
             onClick={onClose}
-            className="p-1 text-slate-400 hover:text-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="p-2 text-slate-400 hover:text-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 min-w-[48px] min-h-[48px] flex items-center justify-center"
             aria-label="Close Modal"
           >
             <X className="w-5 h-5" />

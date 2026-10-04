@@ -38,6 +38,17 @@ describe('Button Component', () => {
     fireEvent.click(screen.getByRole('button'));
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
+
+  it('enforces accessible touch target minimum height (>=48px)', () => {
+    const { container: containerSm } = render(<Button size="sm">Small</Button>);
+    expect(containerSm.firstElementChild?.className).toContain('min-h-[48px]');
+
+    const { container: containerMd } = render(<Button size="md">Medium</Button>);
+    expect(containerMd.firstElementChild?.className).toContain('min-h-[48px]');
+
+    const { container: containerLg } = render(<Button size="lg">Large</Button>);
+    expect(containerLg.firstElementChild?.className).toContain('min-h-[52px]');
+  });
 });
 
 describe('Input Component', () => {
@@ -66,6 +77,12 @@ describe('Input Component', () => {
     const input = screen.getByRole('textbox');
     fireEvent.change(input, { target: { value: 'Walk-in Freezer' } });
     expect(handleChange).toHaveBeenCalled();
+  });
+
+  it('enforces accessible touch target minimum height (>=48px)', () => {
+    render(<Input label="Test" id="test-input" />);
+    const input = screen.getByRole('textbox');
+    expect(input.className).toContain('min-h-[48px]');
   });
 });
 
@@ -110,6 +127,13 @@ describe('Modal Component', () => {
     render(<Modal isOpen={true} onClose={handleClose} title="Title">Content</Modal>);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('enforces accessible touch target minimum size (>=48x48px) on close button', () => {
+    render(<Modal isOpen={true} onClose={vi.fn()} title="Title">Content</Modal>);
+    const closeBtn = screen.getByRole('button', { name: 'Close Modal' });
+    expect(closeBtn.className).toContain('min-w-[48px]');
+    expect(closeBtn.className).toContain('min-h-[48px]');
   });
 });
 
