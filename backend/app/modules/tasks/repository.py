@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Sequence
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, joinedload
@@ -127,3 +127,109 @@ def list_tasks(
     tasks = db.scalars(stmt).unique().all()
 
     return tasks, total
+
+
+def get_equipment_by_id(db: Session, equipment_id: uuid.UUID):
+    from app.models.tasks_and_rules import Equipment
+    stmt = select(Equipment).where(Equipment.id == equipment_id)
+    return db.scalar(stmt)
+
+
+def get_evidence_file_by_id(db: Session, evidence_file_id: uuid.UUID):
+    from app.models.tasks_and_rules import EvidenceFile
+    stmt = select(EvidenceFile).where(EvidenceFile.id == evidence_file_id)
+    return db.scalar(stmt)
+
+
+def get_idempotency_key(db: Session, key: str):
+    from app.models.tasks_and_rules import IdempotencyKey
+    stmt = select(IdempotencyKey).where(IdempotencyKey.key == key)
+    return db.scalar(stmt)
+
+
+def create_idempotency_key(
+    db: Session,
+    restaurant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    key: str,
+    request_hash: str,
+    status: str = "PROCESSING",
+    expires_delta_seconds: int = 86400,
+):
+    from app.models.tasks_and_rules import IdempotencyKey
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(seconds=expires_delta_seconds)
+
+    record = IdempotencyKey(
+        id=uuid.uuid4(),
+        restaurant_id=restaurant_id,
+        user_id=user_id,
+        key=key,
+        request_hash=request_hash,
+        status=status,
+        expires_at=expires_at,
+    )
+    db.add(record)
+    db.flush()
+    return record
+
+
+def update_idempotency_key(
+    db: Session,
+    record,
+    status: str,
+    response_jsonb: dict | None = None,
+):
+    record.status = status
+    if response_jsonb is not None:
+        record.response_jsonb = response_jsonb
+    db.flush()
+    return record
+
+
+def create_entry(
+    db: Session,
+    restaurant_id: uuid.UUID,
+    task_id: uuid.UUID,
+    user_id: uuid.UUID,
+    equipment_id: uuid.UUID | None = None,
+    evidence_file_id: uuid.UUID | None = None,
+    idempotency_key_id: uuid.UUID | None = None,
+    value_numeric: float | None = None,
+    value_text: str | None = None,
+    value_jsonb: dict | None = None,
+    unit: str | None = None,
+    safety_status: str = "NORMAL",
+):
+    from app.models.tasks_and_rules import Entry
+    entry = Entry(
+        id=uuid.uuid4(),
+        restaurant_id=restaurant_id,
+        task_id=task_id,
+        user_id=user_id,
+        equipment_id=equipment_id,
+        evidence_file_id=evidence_file_id,
+        idempotency_key_id=idempotency_key_id,
+        value_numeric=value_numeric,
+        value_text=value_text,
+        value_jsonb=value_jsonb,
+        unit=unit,
+        safety_status=safety_status,
+        recorded_at=datetime.now(timezone.utc),
+    )
+    db.add(entry)
+    db.flush()
+    return entry
+
+
+def update_task_status(
+    db: Session,
+    task: Task,
+    status: str = "COMPLETED",
+    completed_at: datetime | None = None,
+):
+    task.status = status
+    task.completed_at = completed_at or datetime.now(timezone.utc)
+    db.flush()
+    return task
+
