@@ -37,6 +37,14 @@ def test_database_tables_exist():
 def test_seed_data_validation():
     db = SessionLocal()
     try:
+        demo_rest = db.query(Restaurant).filter_by(name="Demo Commercial Kitchen").first()
+        if not demo_rest:
+            from database.seeds.run_all import seed_demo_tenant, seed_reference_data, seed_system_roles_and_permissions
+            seed_system_roles_and_permissions(db)
+            demo_rest = seed_demo_tenant(db)
+            seed_reference_data(db, demo_rest)
+            db.commit()
+
         roles = db.query(Role).all()
         role_names = [r.name for r in roles]
         assert "STAFF" in role_names
@@ -46,7 +54,6 @@ def test_seed_data_validation():
         permissions = db.query(Permission).all()
         assert len(permissions) >= 14
 
-        demo_rest = db.query(Restaurant).filter_by(name="Demo Commercial Kitchen").first()
         assert demo_rest is not None
         assert demo_rest.status == "ACTIVE"
         assert demo_rest.city == "Bengaluru"

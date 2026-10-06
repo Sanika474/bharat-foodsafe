@@ -258,7 +258,7 @@ def execute_task_entry(
             details=[{"field": "value", "issue": "numeric, text, or jsonb value required"}],
         )
 
-    # 5. Create Entry & Update Task Status
+    # 5. Create Entry, Evaluate Deterministic Safety Rules & Update Task Status
     entry = repository.create_entry(
         db=db,
         restaurant_id=task.restaurant_id,
@@ -273,6 +273,9 @@ def execute_task_entry(
         unit=req.unit,
         safety_status="NORMAL",
     )
+
+    from app.modules.safety_rules.engine import evaluate_and_persist_entry_safety
+    evaluate_and_persist_entry_safety(db=db, entry=entry, task=task)
 
     repository.update_task_status(
         db=db,
