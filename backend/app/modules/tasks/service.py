@@ -307,6 +307,23 @@ def execute_task_entry(
     from app.modules.anomaly.service import evaluate_entry_anomaly
     evaluate_entry_anomaly(db=db, entry=entry, user_id=tenant_ctx.user_id)
 
+    from app.modules.outbox.service import record_outbox_event
+    record_outbox_event(
+        db=db,
+        event_type="TASK_COMPLETED",
+        aggregate_type="TASK",
+        aggregate_id=task.id,
+        restaurant_id=task.restaurant_id,
+        payload_jsonb={
+            "task_id": str(task.id),
+            "entry_id": str(entry.id),
+            "user_id": str(tenant_ctx.user_id),
+            "title": "Task Completed",
+            "message": f"Task entry logged for task '{task.template.name if task and task.template else 'Task'}'",
+        },
+        dedupe_key=f"TASK_COMPLETED_{entry.id}",
+    )
+
     # 6. Build Response Data Envelope
     response_dto = EntryResponse(
         id=entry.id,

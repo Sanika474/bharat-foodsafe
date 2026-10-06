@@ -51,6 +51,23 @@ def evaluate_entry_anomaly(
             },
         )
 
+        from app.modules.outbox.service import record_outbox_event
+        record_outbox_event(
+            db=db,
+            event_type="ANOMALY_FLAGGED",
+            aggregate_type="ANOMALY_RESULT",
+            aggregate_id=result.id,
+            restaurant_id=entry.restaurant_id,
+            payload_jsonb={
+                "anomaly_id": str(result.id),
+                "entry_id": str(entry.id),
+                "decision": result.decision,
+                "title": f"Anomaly Flagged: {result.decision}",
+                "message": f"Record integrity anomaly {result.decision} flagged on entry {entry.id}",
+            },
+            dedupe_key=f"ANOMALY_FLAGGED_{result.id}",
+        )
+
     db.flush()
     return result
 

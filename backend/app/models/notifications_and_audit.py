@@ -23,6 +23,7 @@ class Notification(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     restaurant_id = Column(UUID(as_uuid=True), ForeignKey("restaurants.id", ondelete="CASCADE"), nullable=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    outbox_event_id = Column(UUID(as_uuid=True), ForeignKey("outbox_events.id", ondelete="SET NULL"), nullable=True)
     title = Column(String(200), nullable=False)
     message = Column(Text, nullable=False)
     event_type = Column(String(80), nullable=False)
@@ -32,6 +33,11 @@ class Notification(Base):
 
     restaurant = relationship("Restaurant", backref="notifications")
     user = relationship("User", backref="notifications")
+    outbox_event = relationship("OutboxEvent", backref="notifications")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "outbox_event_id", name="uq_notifications_user_outbox_event"),
+    )
 
 
 class NotificationPreference(Base):
@@ -66,6 +72,7 @@ class OutboxEvent(Base):
     last_error = Column(Text, nullable=True)
     lease_id = Column(UUID(as_uuid=True), nullable=True)
     lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    dedupe_key = Column(String(150), unique=True, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 

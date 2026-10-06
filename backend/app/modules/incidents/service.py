@@ -76,6 +76,23 @@ def trigger_critical_deviation_incident(
         payload_jsonb={"entry_id": str(entry.id), "severity": incident.severity, "status": incident.status},
     )
 
+    from app.modules.outbox.service import record_outbox_event
+    record_outbox_event(
+        db=db,
+        event_type="INCIDENT_CREATED",
+        aggregate_type="INCIDENT",
+        aggregate_id=incident.id,
+        restaurant_id=entry.restaurant_id,
+        payload_jsonb={
+            "incident_id": str(incident.id),
+            "entry_id": str(entry.id),
+            "severity": incident.severity,
+            "title": "CRITICAL Food Safety Deviation Detected",
+            "message": f"Critical boundary breach: {incident.title}",
+        },
+        dedupe_key=f"INCIDENT_CREATED_{incident.id}",
+    )
+
     db.flush()
     return incident
 
@@ -137,6 +154,22 @@ def assign_corrective_action(
         user_id=tenant_ctx.user_id,
         resource_id=ca.id,
         payload_jsonb={"assigned_to": str(req.assigned_to), "status": ca.status},
+    )
+
+    from app.modules.outbox.service import record_outbox_event
+    record_outbox_event(
+        db=db,
+        event_type="CAPA_ASSIGNED",
+        aggregate_type="CORRECTIVE_ACTION",
+        aggregate_id=ca.id,
+        restaurant_id=ca.incident.restaurant_id,
+        payload_jsonb={
+            "capa_id": str(ca.id),
+            "assigned_to": str(req.assigned_to),
+            "title": "CAPA Assigned",
+            "message": f"You have been assigned CAPA for incident '{ca.incident.title}'",
+        },
+        dedupe_key=f"CAPA_ASSIGNED_{ca.id}_{req.assigned_to}",
     )
 
     db.commit()
@@ -305,6 +338,22 @@ def verify_corrective_action(
         user_id=tenant_ctx.user_id,
         resource_id=ca.id,
         payload_jsonb={"approved": req.approved, "incident_status": incident.status, "ca_status": ca.status},
+    )
+
+    from app.modules.outbox.service import record_outbox_event
+    record_outbox_event(
+        db=db,
+        event_type="CAPA_VERIFIED",
+        aggregate_type="CORRECTIVE_ACTION",
+        aggregate_id=ca.id,
+        restaurant_id=incident.restaurant_id,
+        payload_jsonb={
+            "capa_id": str(ca.id),
+            "approved": req.approved,
+            "title": "CAPA Verification Update",
+            "message": f"CAPA verification {'approved' if req.approved else 'rejected'} for incident '{incident.title}'",
+        },
+        dedupe_key=f"CAPA_VERIFIED_{ca.id}_{req.approved}",
     )
 
     db.commit()
