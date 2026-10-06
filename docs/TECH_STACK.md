@@ -28,7 +28,7 @@ The architecture of **Bharat FoodSafe** is locked as a single **Modular Monolith
 | **Server State** | **TanStack Query 5.62.7** | [tanstack.com/query](https://tanstack.com/query/latest) | Automatic caching, background revalidation, optimistic updates, and built-in offline query retries. | **Redux Toolkit 2.5** (excessive boilerplate for managing server response state). |
 | **Form Handling** | **React Hook Form 7.54.2** | [react-hook-form.com](https://react-hook-form.com/) | Uncontrolled form inputs minimizing re-renders on mobile devices during fast numerical entry. | **Formik 2.4** (causes heavy full-form re-renders on every keystroke). |
 | **Validation** | **Zod 3.24.1** | [zod.dev](https://zod.dev/) | Schema validation with automated TypeScript type inference; aligns directly with FastAPI Pydantic DTOs. | **Yup 1.6** (inferior TypeScript integration). |
-| **HTTP Client** | **Axios 1.7.9** | [axios-http.com](https://axios-http.com/) | Interceptors for seamless JWT access token refresh and global idempotency key injection. | **Native Fetch** (requires manual wrapper for interceptors and response envelope handling). |
+| **HTTP Client** | **Axios 1.8.2** | [axios-http.com](https://axios-http.com/) | Interceptors for seamless JWT access token refresh and global idempotency key injection. | **Native Fetch** (requires manual wrapper for interceptors and response envelope handling). |
 | **Icons** | **Lucide React 0.469.0** | [lucide.dev](https://lucide.dev/) | Lightweight, accessible SVG icon package supporting clean UI state indicators. | **FontAwesome 6** (large bundle footprint). |
 
 ---
@@ -173,29 +173,32 @@ format = "ruff format app/ tests/"
 ```json
 {
   "dependencies": {
-    "@tanstack/react-query": "5.62.7",
-    "axios": "1.7.9",
-    "clsx": "2.1.1",
-    "lucide-react": "0.469.0",
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
-    "react-hook-form": "7.54.2",
-    "react-router-dom": "7.1.1",
-    "tailwind-merge": "2.6.0",
-    "zod": "3.24.1"
+    "@tanstack/react-query": "^5.62.7",
+    "axios": "^1.8.2",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.469.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-hook-form": "^7.54.2",
+    "react-router-dom": "^7.3.0",
+    "tailwind-merge": "^2.6.0",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@types/node": "22.10.2",
-    "@types/react": "19.0.2",
-    "@types/react-dom": "19.0.2",
-    "@vitejs/plugin-react": "4.3.4",
-    "autoprefixer": "10.4.20",
-    "eslint": "9.17.0",
-    "postcss": "8.4.49",
-    "tailwindcss": "4.0.0",
-    "typescript": "5.7.2",
-    "vite": "6.0.7",
-    "vitest": "2.1.8"
+    "@tailwindcss/vite": "^4.0.0",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.17.0",
+    "jsdom": "^30.1.2",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.9"
   }
 }
 ```

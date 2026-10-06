@@ -170,6 +170,60 @@ def seed_reference_data(db, restaurant):
         print(f"  Created verified rule source: {rule_source.title}")
 
 
+def seed_demo_users(db, restaurant):
+    print("Seeding demo users...")
+    from app.core.security import hash_password, hash_pin
+    from app.models.identity import UserRole
+
+    staff_role = db.query(Role).filter_by(name="STAFF").first()
+    manager_role = db.query(Role).filter_by(name="MANAGER").first()
+    admin_role = db.query(Role).filter_by(name="PLATFORM_ADMIN").first()
+
+    # 1. Staff / Manager Demo User (Phone: 9876543210, PIN: 1234)
+    staff_user = db.query(User).filter_by(phone="9876543210").first()
+    if not staff_user:
+        staff_user = User(
+            id=uuid.uuid4(),
+            restaurant_id=restaurant.id,
+            name="Demo Kitchen Staff",
+            phone="9876543210",
+            pin_hash=hash_pin("1234"),
+            status="ACTIVE",
+        )
+        db.add(staff_user)
+        db.flush()
+        if staff_role:
+            db.add(UserRole(id=uuid.uuid4(), user_id=staff_user.id, role_id=staff_role.id, restaurant_id=restaurant.id))
+        if manager_role:
+            db.add(UserRole(id=uuid.uuid4(), user_id=staff_user.id, role_id=manager_role.id, restaurant_id=restaurant.id))
+        print("  Created demo staff/manager user: 9876543210")
+    else:
+        staff_user.pin_hash = hash_pin("1234")
+        staff_user.status = "ACTIVE"
+        print("  Updated existing staff/manager user PIN: 9876543210")
+
+    # 2. Platform Admin Demo User (Email: admin@bharatfoodsafe.io, Password: AdminPass123!)
+    admin_user = db.query(User).filter_by(email="admin@bharatfoodsafe.io").first()
+    if not admin_user:
+        admin_user = User(
+            id=uuid.uuid4(),
+            restaurant_id=None,
+            name="Demo Platform Admin",
+            email="admin@bharatfoodsafe.io",
+            password_hash=hash_password("AdminPass123!"),
+            status="ACTIVE",
+        )
+        db.add(admin_user)
+        db.flush()
+        if admin_role:
+            db.add(UserRole(id=uuid.uuid4(), user_id=admin_user.id, role_id=admin_role.id, restaurant_id=None))
+        print("  Created demo platform admin user: admin@bharatfoodsafe.io")
+    else:
+        admin_user.password_hash = hash_password("AdminPass123!")
+        admin_user.status = "ACTIVE"
+        print("  Updated existing admin user password: admin@bharatfoodsafe.io")
+
+
 def run_seeds():
     db = SessionLocal()
     try:
@@ -177,6 +231,7 @@ def run_seeds():
         seed_roles_and_permissions(db)
         demo_restaurant = seed_demo_tenant(db)
         seed_reference_data(db, demo_restaurant)
+        seed_demo_users(db, demo_restaurant)
         db.commit()
         print("Seed data script executed successfully with 0 errors!")
     except Exception as e:

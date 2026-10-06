@@ -62,6 +62,14 @@ def test_setup_data(db_session: Session):
         pincode="560001",
         status="ACTIVE",
     )
+    # Clean any conflicting pre-existing test users in DB
+    existing_colliding_users = db_session.query(User).filter(
+        User.phone.in_(["9876543210", "9111111111"]) | (User.email == "admin@bharatfoodsafe.io")
+    ).all()
+    for u in existing_colliding_users:
+        db_session.query(AuthSession).filter_by(user_id=u.id).delete(synchronize_session=False)
+        db_session.query(UserRole).filter_by(user_id=u.id).delete(synchronize_session=False)
+        db_session.delete(u)
     db_session.add(restaurant)
     db_session.commit()
 
