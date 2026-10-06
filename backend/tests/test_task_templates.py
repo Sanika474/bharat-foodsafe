@@ -67,7 +67,7 @@ def template_test_data(db_session: Session):
         id=uuid.uuid4(),
         restaurant_id=rest_a.id,
         name="Manager A",
-        phone="9888888881",
+        phone=f"+9196{uuid.uuid4().hex[:8]}",
         status="ACTIVE",
     )
     db_session.add(manager_a)
@@ -78,7 +78,7 @@ def template_test_data(db_session: Session):
         id=uuid.uuid4(),
         restaurant_id=rest_a.id,
         name="Staff A",
-        phone="9888888882",
+        phone=f"+9195{uuid.uuid4().hex[:8]}",
         status="ACTIVE",
     )
     db_session.add(staff_a)
@@ -89,7 +89,7 @@ def template_test_data(db_session: Session):
         id=uuid.uuid4(),
         restaurant_id=rest_b.id,
         name="Manager B",
-        phone="9888888883",
+        phone=f"+9194{uuid.uuid4().hex[:8]}",
         status="ACTIVE",
     )
     db_session.add(manager_b)
@@ -125,6 +125,8 @@ def template_test_data(db_session: Session):
     }
 
     # Clean up test data
+    from app.models.tasks_and_rules import Task
+    db_session.query(Task).delete()
     db_session.query(TaskTemplateVersion).delete()
     db_session.query(TaskTemplate).delete()
     db_session.query(TaskCategory).filter_by(id=category.id).delete()
