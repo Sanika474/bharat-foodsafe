@@ -65,6 +65,17 @@ def trigger_critical_deviation_incident(
         status="PENDING",
     )
 
+    from app.core.audit import record_audit_event
+    record_audit_event(
+        db=db,
+        event_name="INCIDENT_CREATED",
+        resource_type="incident",
+        restaurant_id=entry.restaurant_id,
+        user_id=entry.user_id,
+        resource_id=incident.id,
+        payload_jsonb={"entry_id": str(entry.id), "severity": incident.severity, "status": incident.status},
+    )
+
     db.flush()
     return incident
 
@@ -116,6 +127,17 @@ def assign_corrective_action(
     # Move incident status to INVESTIGATING if OPEN
     if ca.incident.status in ("OPEN", "RESOLVED"):
         repository.update_incident_status(db, ca.incident, status="INVESTIGATING")
+
+    from app.core.audit import record_audit_event
+    record_audit_event(
+        db=db,
+        event_name="CAPA_ASSIGNED",
+        resource_type="corrective_action",
+        restaurant_id=ca.incident.restaurant_id,
+        user_id=tenant_ctx.user_id,
+        resource_id=ca.id,
+        payload_jsonb={"assigned_to": str(req.assigned_to), "status": ca.status},
+    )
 
     db.commit()
     return CorrectiveActionResponse.model_validate(ca)
@@ -215,6 +237,17 @@ def complete_corrective_action_recheck(
     )
     repository.update_incident_status(db, incident, status="RESOLVED")
 
+    from app.core.audit import record_audit_event
+    record_audit_event(
+        db=db,
+        event_name="CAPA_COMPLETED",
+        resource_type="corrective_action",
+        restaurant_id=incident.restaurant_id,
+        user_id=tenant_ctx.user_id,
+        resource_id=ca.id,
+        payload_jsonb={"recheck_entry_id": str(recheck_entry.id), "status": ca.status},
+    )
+
     db.commit()
     return CorrectiveActionResponse.model_validate(ca)
 
@@ -262,6 +295,17 @@ def verify_corrective_action(
             notes=req.notes or "Manager rejected verification. Please upload legible photo and re-submit.",
         )
         repository.update_incident_status(db, incident, status="INVESTIGATING", resolved_at=None)
+
+    from app.core.audit import record_audit_event
+    record_audit_event(
+        db=db,
+        event_name="CAPA_VERIFIED",
+        resource_type="corrective_action",
+        restaurant_id=incident.restaurant_id,
+        user_id=tenant_ctx.user_id,
+        resource_id=ca.id,
+        payload_jsonb={"approved": req.approved, "incident_status": incident.status, "ca_status": ca.status},
+    )
 
     db.commit()
     return CorrectiveActionResponse.model_validate(ca)

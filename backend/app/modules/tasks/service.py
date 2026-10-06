@@ -288,6 +288,22 @@ def execute_task_entry(
         completed_at=datetime.now(timezone.utc),
     )
 
+    from app.core.audit import record_audit_event
+    record_audit_event(
+        db=db,
+        event_name="TASK_ENTRY_CREATED",
+        resource_type="entry",
+        restaurant_id=task.restaurant_id,
+        user_id=tenant_ctx.user_id,
+        resource_id=entry.id,
+        payload_jsonb={
+            "task_id": str(task.id),
+            "value_numeric": float(entry.value_numeric) if entry.value_numeric is not None else None,
+            "unit": entry.unit,
+            "safety_status": entry.safety_status,
+        },
+    )
+
     # 6. Build Response Data Envelope
     response_dto = EntryResponse(
         id=entry.id,
