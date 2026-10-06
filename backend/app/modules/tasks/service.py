@@ -275,7 +275,11 @@ def execute_task_entry(
     )
 
     from app.modules.safety_rules.engine import evaluate_and_persist_entry_safety
-    evaluate_and_persist_entry_safety(db=db, entry=entry, task=task)
+    safety_result = evaluate_and_persist_entry_safety(db=db, entry=entry, task=task)
+
+    if entry.safety_status == "CRITICAL":
+        from app.modules.incidents.service import trigger_critical_deviation_incident
+        trigger_critical_deviation_incident(db=db, entry=entry, task=task, evaluation_details=safety_result.details)
 
     repository.update_task_status(
         db=db,

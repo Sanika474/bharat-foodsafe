@@ -10,6 +10,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -74,6 +75,7 @@ class Incident(Base):
     __table_args__ = (
         CheckConstraint("severity IN ('LOW','MEDIUM','HIGH','CRITICAL')", name="chk_incident_severity"),
         CheckConstraint("status IN ('OPEN','INVESTIGATING','RESOLVED','CLOSED')", name="chk_incident_status"),
+        UniqueConstraint("entry_id", name="uq_incidents_entry_id"),
     )
 
 
@@ -83,6 +85,9 @@ class CorrectiveAction(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     incident_id = Column(UUID(as_uuid=True), ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False)
     assigned_to = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
+    recheck_entry_id = Column(UUID(as_uuid=True), ForeignKey("entries.id", ondelete="SET NULL"), nullable=True)
+    evidence_file_id = Column(UUID(as_uuid=True), ForeignKey("evidence_files.id", ondelete="SET NULL"), nullable=True)
+    notes = Column(Text, nullable=True)
     action_text = Column(Text, nullable=False)
     status = Column(String(20), nullable=False, default="PENDING")
     verified_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -93,6 +98,8 @@ class CorrectiveAction(Base):
     incident = relationship("Incident", backref="corrective_actions")
     assignee = relationship("User", foreign_keys=[assigned_to])
     verifier = relationship("User", foreign_keys=[verified_by])
+    recheck_entry = relationship("Entry", foreign_keys=[recheck_entry_id])
+    evidence_file = relationship("EvidenceFile", foreign_keys=[evidence_file_id])
 
     __table_args__ = (
         CheckConstraint("status IN ('PENDING','IN_PROGRESS','VERIFIED','REJECTED')", name="chk_ca_status"),

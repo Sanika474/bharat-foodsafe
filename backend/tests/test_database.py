@@ -39,8 +39,13 @@ def test_seed_data_validation():
     try:
         demo_rest = db.query(Restaurant).filter_by(name="Demo Commercial Kitchen").first()
         if not demo_rest:
-            from database.seeds.run_all import seed_demo_tenant, seed_reference_data, seed_system_roles_and_permissions
-            seed_system_roles_and_permissions(db)
+            import sys
+            from pathlib import Path
+            root_dir = str(Path(__file__).resolve().parents[2])
+            if root_dir not in sys.path:
+                sys.path.insert(0, root_dir)
+            from database.seeds.run_all import seed_demo_tenant, seed_reference_data, seed_roles_and_permissions
+            seed_roles_and_permissions(db)
             demo_rest = seed_demo_tenant(db)
             seed_reference_data(db, demo_rest)
             db.commit()
