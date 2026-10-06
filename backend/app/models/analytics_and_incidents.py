@@ -49,7 +49,8 @@ class AnomalyResult(Base):
     model_version = relationship("ModelVersion", backref="anomaly_results")
 
     __table_args__ = (
-        CheckConstraint("decision IN ('NO_FLAG','REVIEW','SUSPICIOUS')", name="chk_anomaly_decision"),
+        CheckConstraint("decision IN ('NO_FLAG','REVIEW','SUSPICIOUS','UNAVAILABLE','ESCALATE')", name="chk_anomaly_decision"),
+        UniqueConstraint("entry_id", name="uq_anomaly_results_entry_id"),
     )
 
 

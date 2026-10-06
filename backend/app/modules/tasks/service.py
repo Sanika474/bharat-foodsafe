@@ -304,6 +304,9 @@ def execute_task_entry(
         },
     )
 
+    from app.modules.anomaly.service import evaluate_entry_anomaly
+    evaluate_entry_anomaly(db=db, entry=entry, user_id=tenant_ctx.user_id)
+
     # 6. Build Response Data Envelope
     response_dto = EntryResponse(
         id=entry.id,
