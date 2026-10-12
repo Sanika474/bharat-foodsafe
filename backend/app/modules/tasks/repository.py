@@ -7,11 +7,7 @@ from app.models.tasks_and_rules import Task, TaskAssignment, TaskTemplate, TaskT
 
 
 def get_task_by_id(db: Session, task_id: uuid.UUID) -> Task | None:
-    stmt = (
-        select(Task)
-        .options(joinedload(Task.assignments))
-        .where(Task.id == task_id)
-    )
+    stmt = select(Task).options(joinedload(Task.assignments)).where(Task.id == task_id)
     return db.scalar(stmt)
 
 
@@ -74,14 +70,14 @@ def list_active_templates_for_restaurant(
     stmt = select(TaskTemplate).where(
         and_(
             TaskTemplate.restaurant_id == restaurant_id,
-            TaskTemplate.is_active == True,
+            TaskTemplate.is_active,
         )
     )
     return db.scalars(stmt).all()
 
 
 def list_all_active_templates(db: Session) -> Sequence[TaskTemplate]:
-    stmt = select(TaskTemplate).where(TaskTemplate.is_active == True)
+    stmt = select(TaskTemplate).where(TaskTemplate.is_active)
     return db.scalars(stmt).all()
 
 
@@ -131,18 +127,21 @@ def list_tasks(
 
 def get_equipment_by_id(db: Session, equipment_id: uuid.UUID):
     from app.models.tasks_and_rules import Equipment
+
     stmt = select(Equipment).where(Equipment.id == equipment_id)
     return db.scalar(stmt)
 
 
 def get_evidence_file_by_id(db: Session, evidence_file_id: uuid.UUID):
     from app.models.tasks_and_rules import EvidenceFile
+
     stmt = select(EvidenceFile).where(EvidenceFile.id == evidence_file_id)
     return db.scalar(stmt)
 
 
 def get_idempotency_key(db: Session, key: str):
     from app.models.tasks_and_rules import IdempotencyKey
+
     stmt = select(IdempotencyKey).where(IdempotencyKey.key == key)
     return db.scalar(stmt)
 
@@ -157,6 +156,7 @@ def create_idempotency_key(
     expires_delta_seconds: int = 86400,
 ):
     from app.models.tasks_and_rules import IdempotencyKey
+
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(seconds=expires_delta_seconds)
 
@@ -202,6 +202,7 @@ def create_entry(
     safety_status: str = "NORMAL",
 ):
     from app.models.tasks_and_rules import Entry
+
     entry = Entry(
         id=uuid.uuid4(),
         restaurant_id=restaurant_id,
@@ -232,4 +233,3 @@ def update_task_status(
     task.completed_at = completed_at or datetime.now(timezone.utc)
     db.flush()
     return task
-

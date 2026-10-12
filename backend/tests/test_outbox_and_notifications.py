@@ -9,7 +9,12 @@ from app.core.security import create_access_token
 from app.main import app
 from app.models.analytics_and_incidents import AnomalyResult, CorrectiveAction, Incident
 from app.models.identity import Restaurant, Role, User, UserRole
-from app.models.notifications_and_audit import AuditLog, Notification, NotificationPreference, OutboxEvent
+from app.models.notifications_and_audit import (
+    AuditLog,
+    Notification,
+    NotificationPreference,
+    OutboxEvent,
+)
 from app.models.tasks_and_rules import Entry, Task, TaskCategory, TaskTemplate, TaskTemplateVersion
 from app.modules.incidents import service as incident_service
 from app.modules.outbox import repository as outbox_repo
@@ -67,36 +72,93 @@ def outbox_test_data(db_session: Session):
     db_session.commit()
 
     # Users
-    staff_a1 = User(id=uuid.uuid4(), restaurant_id=rest_a.id, name="Outbox Staff A1", phone=f"+9191{uuid.uuid4().hex[:8]}", status="ACTIVE")
-    manager_a = User(id=uuid.uuid4(), restaurant_id=rest_a.id, name="Outbox Manager A", phone=f"+9192{uuid.uuid4().hex[:8]}", status="ACTIVE")
-    staff_b1 = User(id=uuid.uuid4(), restaurant_id=rest_b.id, name="Outbox Staff B1", phone=f"+9193{uuid.uuid4().hex[:8]}", status="ACTIVE")
+    staff_a1 = User(
+        id=uuid.uuid4(),
+        restaurant_id=rest_a.id,
+        name="Outbox Staff A1",
+        phone=f"+9191{uuid.uuid4().hex[:8]}",
+        status="ACTIVE",
+    )
+    manager_a = User(
+        id=uuid.uuid4(),
+        restaurant_id=rest_a.id,
+        name="Outbox Manager A",
+        phone=f"+9192{uuid.uuid4().hex[:8]}",
+        status="ACTIVE",
+    )
+    staff_b1 = User(
+        id=uuid.uuid4(),
+        restaurant_id=rest_b.id,
+        name="Outbox Staff B1",
+        phone=f"+9193{uuid.uuid4().hex[:8]}",
+        status="ACTIVE",
+    )
     db_session.add_all([staff_a1, manager_a, staff_b1])
     db_session.commit()
 
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=staff_a1.id, role_id=staff_role.id, restaurant_id=rest_a.id))
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=manager_a.id, role_id=manager_role.id, restaurant_id=rest_a.id))
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=staff_b1.id, role_id=staff_role.id, restaurant_id=rest_b.id))
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=staff_a1.id, role_id=staff_role.id, restaurant_id=rest_a.id
+        )
+    )
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=manager_a.id, role_id=manager_role.id, restaurant_id=rest_a.id
+        )
+    )
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=staff_b1.id, role_id=staff_role.id, restaurant_id=rest_b.id
+        )
+    )
     db_session.commit()
 
-    token_staff_a1, _ = create_access_token(user_id=staff_a1.id, tenant_id=rest_a.id, roles=["STAFF"])
-    token_manager_a, _ = create_access_token(user_id=manager_a.id, tenant_id=rest_a.id, roles=["MANAGER"])
-    token_staff_b1, _ = create_access_token(user_id=staff_b1.id, tenant_id=rest_b.id, roles=["STAFF"])
+    token_staff_a1, _ = create_access_token(
+        user_id=staff_a1.id, tenant_id=rest_a.id, roles=["STAFF"]
+    )
+    token_manager_a, _ = create_access_token(
+        user_id=manager_a.id, tenant_id=rest_a.id, roles=["MANAGER"]
+    )
+    token_staff_b1, _ = create_access_token(
+        user_id=staff_b1.id, tenant_id=rest_b.id, roles=["STAFF"]
+    )
 
     # Category & Template & Task
-    cat = TaskCategory(id=uuid.uuid4(), restaurant_id=rest_a.id, name="Outbox Cat", code=f"OUT_{uuid.uuid4().hex[:4]}")
+    cat = TaskCategory(
+        id=uuid.uuid4(),
+        restaurant_id=rest_a.id,
+        name="Outbox Cat",
+        code=f"OUT_{uuid.uuid4().hex[:4]}",
+    )
     db_session.add(cat)
     db_session.commit()
 
-    tmpl = TaskTemplate(id=uuid.uuid4(), restaurant_id=rest_a.id, category_id=cat.id, name="Outbox Template", code=f"TMP_{uuid.uuid4().hex[:4]}")
+    tmpl = TaskTemplate(
+        id=uuid.uuid4(),
+        restaurant_id=rest_a.id,
+        category_id=cat.id,
+        name="Outbox Template",
+        code=f"TMP_{uuid.uuid4().hex[:4]}",
+    )
     db_session.add(tmpl)
     db_session.commit()
 
-    tmpl_v = TaskTemplateVersion(id=uuid.uuid4(), template_id=tmpl.id, version_number=1, configuration_jsonb={})
+    tmpl_v = TaskTemplateVersion(
+        id=uuid.uuid4(), template_id=tmpl.id, version_number=1, configuration_jsonb={}
+    )
     db_session.add(tmpl_v)
     db_session.commit()
 
     now = datetime.now(timezone.utc)
-    task1 = Task(id=uuid.uuid4(), restaurant_id=rest_a.id, template_id=tmpl.id, template_version_id=tmpl_v.id, occurrence_key=f"2026-10-07_{uuid.uuid4().hex[:4]}", status="PENDING", due_at=now)
+    task1 = Task(
+        id=uuid.uuid4(),
+        restaurant_id=rest_a.id,
+        template_id=tmpl.id,
+        template_version_id=tmpl_v.id,
+        occurrence_key=f"2026-10-07_{uuid.uuid4().hex[:4]}",
+        status="PENDING",
+        due_at=now,
+    )
     db_session.add(task1)
     db_session.commit()
 
@@ -132,12 +194,21 @@ def outbox_test_data(db_session: Session):
 # 1. Transactional Outbox Creation & Rollback Atomicity
 # ------------------------------------------------------------------------------
 
+
 def test_atomic_business_operation_and_outbox_creation(outbox_test_data, db_session: Session):
     rest_id = outbox_test_data["rest_a"].id
     user_id = outbox_test_data["staff_a1"].id
     task = outbox_test_data["task1"]
 
-    entry = Entry(id=uuid.uuid4(), restaurant_id=rest_id, task_id=task.id, user_id=user_id, value_numeric=12.0, unit="C", safety_status="CRITICAL")
+    entry = Entry(
+        id=uuid.uuid4(),
+        restaurant_id=rest_id,
+        task_id=task.id,
+        user_id=user_id,
+        value_numeric=12.0,
+        unit="C",
+        safety_status="CRITICAL",
+    )
     db_session.add(entry)
     db_session.commit()
 
@@ -145,7 +216,11 @@ def test_atomic_business_operation_and_outbox_creation(outbox_test_data, db_sess
     incident = incident_service.trigger_critical_deviation_incident(db_session, entry, task)
     db_session.commit()
 
-    outbox_record = db_session.query(OutboxEvent).filter_by(aggregate_id=incident.id, event_type="INCIDENT_CREATED").first()
+    outbox_record = (
+        db_session.query(OutboxEvent)
+        .filter_by(aggregate_id=incident.id, event_type="INCIDENT_CREATED")
+        .first()
+    )
     assert outbox_record is not None
     assert outbox_record.status == "PENDING"
     assert outbox_record.restaurant_id == rest_id
@@ -174,6 +249,7 @@ def test_transaction_rollback_cancels_outbox_event(outbox_test_data, db_session:
 # ------------------------------------------------------------------------------
 # 2. Worker Event Claiming & Concurrent FOR UPDATE SKIP LOCKED
 # ------------------------------------------------------------------------------
+
 
 def test_claim_pending_outbox_events_lease_locking(outbox_test_data, db_session: Session):
     rest_id = outbox_test_data["rest_a"].id
@@ -240,6 +316,7 @@ def test_skip_locked_concurrent_worker_isolation(outbox_test_data):
 # 3. Successful Batch Processing & Recipient Notification Creation
 # ------------------------------------------------------------------------------
 
+
 def test_process_outbox_batch_delivers_notifications(outbox_test_data, db_session: Session):
     rest_id = outbox_test_data["rest_a"].id
     mgr_a = outbox_test_data["manager_a"]
@@ -260,7 +337,11 @@ def test_process_outbox_batch_delivers_notifications(outbox_test_data, db_sessio
     assert fail_cnt == 0
 
     # Notification delivered to Manager A
-    notif = db_session.query(Notification).filter_by(user_id=mgr_a.id, event_type="INCIDENT_CREATED").first()
+    notif = (
+        db_session.query(Notification)
+        .filter_by(user_id=mgr_a.id, event_type="INCIDENT_CREATED")
+        .first()
+    )
     assert notif is not None
     assert notif.title == "High Temperature Warning"
     assert notif.message == "Chiller 1 breached 8C"
@@ -269,6 +350,7 @@ def test_process_outbox_batch_delivers_notifications(outbox_test_data, db_sessio
 # ------------------------------------------------------------------------------
 # 4. Retry Logic & Max Retry Failure
 # ------------------------------------------------------------------------------
+
 
 def test_outbox_retry_and_max_failure_state(outbox_test_data, db_session: Session):
     rest_id = outbox_test_data["rest_a"].id
@@ -299,6 +381,7 @@ def test_outbox_retry_and_max_failure_state(outbox_test_data, db_session: Sessio
 # 5. Expired Lease Recovery
 # ------------------------------------------------------------------------------
 
+
 def test_expired_lease_recovery(outbox_test_data, db_session: Session):
     rest_id = outbox_test_data["rest_a"].id
     past_time = datetime.now(timezone.utc) - timedelta(minutes=10)
@@ -319,7 +402,9 @@ def test_expired_lease_recovery(outbox_test_data, db_session: Session):
     db_session.commit()
 
     new_worker = uuid.uuid4()
-    claimed = outbox_repo.claim_pending_outbox_events(db_session, worker_id=new_worker, batch_size=10)
+    claimed = outbox_repo.claim_pending_outbox_events(
+        db_session, worker_id=new_worker, batch_size=10
+    )
     db_session.commit()
 
     reclaimed_ids = [e.id for e in claimed]
@@ -329,6 +414,7 @@ def test_expired_lease_recovery(outbox_test_data, db_session: Session):
 # ------------------------------------------------------------------------------
 # 6. Idempotency & Duplicate Notification Prevention
 # ------------------------------------------------------------------------------
+
 
 def test_idempotent_notification_prevention(outbox_test_data, db_session: Session):
     rest_id = outbox_test_data["rest_a"].id
@@ -349,20 +435,25 @@ def test_idempotent_notification_prevention(outbox_test_data, db_session: Sessio
     outbox_service.process_single_outbox_event(db_session, ev)
     db_session.commit()
 
-    initial_count = db_session.query(Notification).filter_by(user_id=mgr_a.id, outbox_event_id=ev.id).count()
+    initial_count = (
+        db_session.query(Notification).filter_by(user_id=mgr_a.id, outbox_event_id=ev.id).count()
+    )
     assert initial_count == 1
 
     # Process second time (retry or duplicate worker run)
     outbox_service.process_single_outbox_event(db_session, ev)
     db_session.commit()
 
-    after_count = db_session.query(Notification).filter_by(user_id=mgr_a.id, outbox_event_id=ev.id).count()
+    after_count = (
+        db_session.query(Notification).filter_by(user_id=mgr_a.id, outbox_event_id=ev.id).count()
+    )
     assert after_count == 1  # No duplicate notification added!
 
 
 # ------------------------------------------------------------------------------
 # 7. User Notification Preferences
 # ------------------------------------------------------------------------------
+
 
 def test_disabled_user_preference_suppresses_notification(outbox_test_data, db_session: Session):
     rest_id = outbox_test_data["rest_a"].id
@@ -392,13 +483,16 @@ def test_disabled_user_preference_suppresses_notification(outbox_test_data, db_s
     outbox_service.process_single_outbox_event(db_session, ev)
     db_session.commit()
 
-    notif = db_session.query(Notification).filter_by(user_id=mgr_a.id, outbox_event_id=ev.id).first()
+    notif = (
+        db_session.query(Notification).filter_by(user_id=mgr_a.id, outbox_event_id=ev.id).first()
+    )
     assert notif is None  # Notification suppressed due to disabled preference!
 
 
 # ------------------------------------------------------------------------------
 # 8. Notification REST API Endpoints & RBAC
 # ------------------------------------------------------------------------------
+
 
 def test_api_get_user_notifications(outbox_test_data, db_session: Session):
     rest_id = outbox_test_data["rest_a"].id
@@ -431,7 +525,14 @@ def test_api_mark_notification_read(outbox_test_data, db_session: Session):
     staff_a1 = outbox_test_data["staff_a1"]
     token_staff = outbox_test_data["token_staff_a1"]
 
-    n = Notification(id=uuid.uuid4(), restaurant_id=rest_id, user_id=staff_a1.id, title="Unread Alert", message="Check temp", event_type="TASK_OVERDUE")
+    n = Notification(
+        id=uuid.uuid4(),
+        restaurant_id=rest_id,
+        user_id=staff_a1.id,
+        title="Unread Alert",
+        message="Check temp",
+        event_type="TASK_OVERDUE",
+    )
     db_session.add(n)
     db_session.commit()
 

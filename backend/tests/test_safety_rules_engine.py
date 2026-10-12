@@ -20,7 +20,6 @@ from app.models.tasks_and_rules import (
     TaskTemplateVersion,
 )
 from app.modules.safety_rules import engine, repository, service
-from app.modules.safety_rules.schema import EvaluationDetail, StandaloneEvaluateRequest
 
 client = TestClient(app)
 
@@ -84,7 +83,9 @@ def rules_test_data(db_session: Session):
     db_session.add(user_a)
     db_session.commit()
 
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=user_a.id, role_id=staff_role.id, restaurant_id=rest_a.id))
+    db_session.add(
+        UserRole(id=uuid.uuid4(), user_id=user_a.id, role_id=staff_role.id, restaurant_id=rest_a.id)
+    )
     db_session.commit()
 
     token_a, _ = create_access_token(user_id=user_a.id, tenant_id=rest_a.id, roles=["STAFF"])
@@ -222,6 +223,7 @@ def rules_test_data(db_session: Session):
 # 1. Deterministic Rule Outcomes & Threshold Boundaries
 # ------------------------------------------------------------------------------
 
+
 def test_normal_outcome(rules_test_data):
     rule = rules_test_data["rule_chiller"]
     detail = engine.evaluate_single_rule(rule, value_numeric=3.5, unit="C")
@@ -273,6 +275,7 @@ def test_exact_threshold_boundaries(rules_test_data):
 # 2. Edge Cases: Missing Observations & Invalid Types
 # ------------------------------------------------------------------------------
 
+
 def test_missing_observation_field(rules_test_data):
     rule = rules_test_data["rule_chiller"]
     # No numeric value supplied for numeric rule
@@ -294,6 +297,7 @@ def test_invalid_observation_type(rules_test_data):
 # ------------------------------------------------------------------------------
 # 3. Multiple Rules & Severity Precedence (CRITICAL > DEVIATION > NORMAL)
 # ------------------------------------------------------------------------------
+
 
 def test_severity_precedence_aggregation(rules_test_data, db_session: Session):
     source = rules_test_data["source_verified"]
@@ -334,6 +338,7 @@ def test_severity_precedence_aggregation(rules_test_data, db_session: Session):
 # ------------------------------------------------------------------------------
 # 4. Rule Version Selection & Gated Activation
 # ------------------------------------------------------------------------------
+
 
 def test_highest_version_selected(db_session: Session, rules_test_data):
     cat = rules_test_data["cat_a"]
@@ -387,6 +392,7 @@ def test_draft_rule_source_ignored(db_session: Session, rules_test_data):
 # 5. Deterministic Repeated Evaluation
 # ------------------------------------------------------------------------------
 
+
 def test_deterministic_repeated_evaluation(rules_test_data):
     rule = rules_test_data["rule_chiller"]
 
@@ -401,6 +407,7 @@ def test_deterministic_repeated_evaluation(rules_test_data):
 # ------------------------------------------------------------------------------
 # 6. Task Entry Execution Integration & Persistence
 # ------------------------------------------------------------------------------
+
 
 def test_task_entry_execution_persists_safety_evaluations(rules_test_data, db_session: Session):
     token = rules_test_data["token_a"]
@@ -431,6 +438,7 @@ def test_task_entry_execution_persists_safety_evaluations(rules_test_data, db_se
 # ------------------------------------------------------------------------------
 # 7. Standalone & Rules API Endpoints
 # ------------------------------------------------------------------------------
+
 
 def test_standalone_evaluate_api(rules_test_data):
     token = rules_test_data["token_a"]
@@ -488,6 +496,7 @@ def test_list_rule_sources_api(rules_test_data):
 # 8. Various Operators & Text/JSON Observation Rules
 # ------------------------------------------------------------------------------
 
+
 def test_text_observation_rules(db_session: Session, rules_test_data):
     source = rules_test_data["source_verified"]
 
@@ -523,7 +532,9 @@ def test_jsonb_nested_field_rules(db_session: Session, rules_test_data):
         is_active=True,
     )
 
-    d_not_clean = engine.evaluate_single_rule(rule_json, value_jsonb={"sanitized": False, "temp": 3.0})
+    d_not_clean = engine.evaluate_single_rule(
+        rule_json, value_jsonb={"sanitized": False, "temp": 3.0}
+    )
     assert d_not_clean.outcome == "DEVIATION"
 
     d_clean = engine.evaluate_single_rule(rule_json, value_jsonb={"sanitized": True, "temp": 3.0})
@@ -532,30 +543,91 @@ def test_jsonb_nested_field_rules(db_session: Session, rules_test_data):
 
 def test_operators_coverage():
     # Test operators: gte, lt, lte, neq, in, not_in, between, out_of_range
-    r_gte = SafetyRule(id=uuid.uuid4(), rule_source_id=uuid.uuid4(), rule_code="R1", version_number=1, name="R1", condition_jsonb={"field": "value_numeric", "operator": "gte", "target_value": 5.0}, action_jsonb={"safety_status": "CRITICAL"})
+    r_gte = SafetyRule(
+        id=uuid.uuid4(),
+        rule_source_id=uuid.uuid4(),
+        rule_code="R1",
+        version_number=1,
+        name="R1",
+        condition_jsonb={"field": "value_numeric", "operator": "gte", "target_value": 5.0},
+        action_jsonb={"safety_status": "CRITICAL"},
+    )
     assert engine.evaluate_single_rule(r_gte, value_numeric=5.0).outcome == "CRITICAL"
     assert engine.evaluate_single_rule(r_gte, value_numeric=4.9).outcome == "NORMAL"
 
-    r_lt = SafetyRule(id=uuid.uuid4(), rule_source_id=uuid.uuid4(), rule_code="R2", version_number=1, name="R2", condition_jsonb={"field": "value_numeric", "operator": "lt", "target_value": 0.0}, action_jsonb={"safety_status": "CRITICAL"})
+    r_lt = SafetyRule(
+        id=uuid.uuid4(),
+        rule_source_id=uuid.uuid4(),
+        rule_code="R2",
+        version_number=1,
+        name="R2",
+        condition_jsonb={"field": "value_numeric", "operator": "lt", "target_value": 0.0},
+        action_jsonb={"safety_status": "CRITICAL"},
+    )
     assert engine.evaluate_single_rule(r_lt, value_numeric=-1.0).outcome == "CRITICAL"
 
-    r_neq = SafetyRule(id=uuid.uuid4(), rule_source_id=uuid.uuid4(), rule_code="R3", version_number=1, name="R3", condition_jsonb={"field": "value_text", "operator": "neq", "target_value": "OK"}, action_jsonb={"safety_status": "DEVIATION"})
+    r_neq = SafetyRule(
+        id=uuid.uuid4(),
+        rule_source_id=uuid.uuid4(),
+        rule_code="R3",
+        version_number=1,
+        name="R3",
+        condition_jsonb={"field": "value_text", "operator": "neq", "target_value": "OK"},
+        action_jsonb={"safety_status": "DEVIATION"},
+    )
     assert engine.evaluate_single_rule(r_neq, value_text="BAD").outcome == "DEVIATION"
 
-    r_in = SafetyRule(id=uuid.uuid4(), rule_source_id=uuid.uuid4(), rule_code="R4", version_number=1, name="R4", condition_jsonb={"field": "value_text", "operator": "in", "target_value": ["POOR", "DIRTY"]}, action_jsonb={"safety_status": "CRITICAL"})
+    r_in = SafetyRule(
+        id=uuid.uuid4(),
+        rule_source_id=uuid.uuid4(),
+        rule_code="R4",
+        version_number=1,
+        name="R4",
+        condition_jsonb={
+            "field": "value_text",
+            "operator": "in",
+            "target_value": ["POOR", "DIRTY"],
+        },
+        action_jsonb={"safety_status": "CRITICAL"},
+    )
     assert engine.evaluate_single_rule(r_in, value_text="DIRTY").outcome == "CRITICAL"
 
-    r_between = SafetyRule(id=uuid.uuid4(), rule_source_id=uuid.uuid4(), rule_code="R5", version_number=1, name="R5", condition_jsonb={"field": "value_numeric", "operator": "between", "target_value": [10.0, 20.0]}, action_jsonb={"safety_status": "DEVIATION"})
+    r_between = SafetyRule(
+        id=uuid.uuid4(),
+        rule_source_id=uuid.uuid4(),
+        rule_code="R5",
+        version_number=1,
+        name="R5",
+        condition_jsonb={
+            "field": "value_numeric",
+            "operator": "between",
+            "target_value": [10.0, 20.0],
+        },
+        action_jsonb={"safety_status": "DEVIATION"},
+    )
     assert engine.evaluate_single_rule(r_between, value_numeric=15.0).outcome == "DEVIATION"
     assert engine.evaluate_single_rule(r_between, value_numeric=25.0).outcome == "NORMAL"
 
-    r_out = SafetyRule(id=uuid.uuid4(), rule_source_id=uuid.uuid4(), rule_code="R6", version_number=1, name="R6", condition_jsonb={"field": "value_numeric", "operator": "out_of_range", "target_value": [0.0, 4.0]}, action_jsonb={"safety_status": "CRITICAL"})
+    r_out = SafetyRule(
+        id=uuid.uuid4(),
+        rule_source_id=uuid.uuid4(),
+        rule_code="R6",
+        version_number=1,
+        name="R6",
+        condition_jsonb={
+            "field": "value_numeric",
+            "operator": "out_of_range",
+            "target_value": [0.0, 4.0],
+        },
+        action_jsonb={"safety_status": "CRITICAL"},
+    )
     assert engine.evaluate_single_rule(r_out, value_numeric=5.0).outcome == "CRITICAL"
 
 
 # ------------------------------------------------------------------------------
 # 9. Additional Full Branch Coverage Unit Tests
 # ------------------------------------------------------------------------------
+
 
 def test_extract_field_value_jsonb_direct():
     v, present = engine._extract_field_value("value_jsonb", value_jsonb={"foo": "bar"})
@@ -712,7 +784,12 @@ def test_engine_remaining_branches_100_percent():
 
 def test_repository_and_service_direct_functions(db_session: Session, rules_test_data):
     from app.core.tenant import TenantContext
-    ctx_a = TenantContext(user_id=rules_test_data["user_a"].id, restaurant_id=rules_test_data["rest_a"].id, roles=["STAFF"])
+
+    ctx_a = TenantContext(
+        user_id=rules_test_data["user_a"].id,
+        restaurant_id=rules_test_data["rest_a"].id,
+        roles=["STAFF"],
+    )
 
     # Repository & Service functions
     sources = repository.list_rule_sources(db_session)
@@ -725,10 +802,22 @@ def test_repository_and_service_direct_functions(db_session: Session, rules_test
     assert len(active_rules) >= 1
 
     # Create & bind custom rule via repository
-    src = repository.create_rule_source(db_session, source_code=f"SRC_{uuid.uuid4().hex[:4]}", title="Title", issuing_authority="AUTH")
-    rule = repository.create_safety_rule(db_session, rule_source_id=src.id, rule_code=f"R_{uuid.uuid4().hex[:4]}", name="R", condition_jsonb={}, action_jsonb={})
-    binding = repository.bind_safety_rule(db_session, safety_rule_id=rule.id, category_id=rules_test_data["cat_a"].id)
+    src = repository.create_rule_source(
+        db_session,
+        source_code=f"SRC_{uuid.uuid4().hex[:4]}",
+        title="Title",
+        issuing_authority="AUTH",
+    )
+    rule = repository.create_safety_rule(
+        db_session,
+        rule_source_id=src.id,
+        rule_code=f"R_{uuid.uuid4().hex[:4]}",
+        name="R",
+        condition_jsonb={},
+        action_jsonb={},
+    )
+    binding = repository.bind_safety_rule(
+        db_session, safety_rule_id=rule.id, category_id=rules_test_data["cat_a"].id
+    )
     assert binding is not None
     assert repository.get_rule_source_by_code(db_session, src.source_code) is not None
-
-

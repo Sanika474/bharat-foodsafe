@@ -93,7 +93,9 @@ def get_upload_binary_file_endpoint(
     tenant_ctx: TenantContext = Depends(get_tenant_context),
     _role_guard: tuple = Depends(require_roles("STAFF", "MANAGER", "PLATFORM_ADMIN")),
 ):
-    content, mime_type, filename = service.get_evidence_file_binary(db, tenant_ctx, evidence_file_id)
+    content, mime_type, filename = service.get_evidence_file_binary(
+        db, tenant_ctx, evidence_file_id
+    )
     return Response(
         content=content,
         media_type=mime_type,

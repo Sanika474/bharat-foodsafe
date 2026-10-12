@@ -99,8 +99,7 @@ def get_recipient_users_for_event(
 
     # Base query for managers of the restaurant
     mgr_user_ids = db.scalars(
-        select(UserRole.user_id)
-        .where(
+        select(UserRole.user_id).where(
             UserRole.restaurant_id == restaurant_id,
             UserRole.role_id.in_(manager_roles),
         )
@@ -128,9 +127,11 @@ def get_recipient_users_for_event(
     if not target_user_ids:
         return []
 
-    users = list(db.scalars(
-        select(User).where(User.id.in_(list(target_user_ids)), User.status == "ACTIVE")
-    ).all())
+    users = list(
+        db.scalars(
+            select(User).where(User.id.in_(list(target_user_ids)), User.status == "ACTIVE")
+        ).all()
+    )
     return users
 
 
@@ -217,8 +218,12 @@ def get_user_notifications(
     return items, total
 
 
-def mark_notification_read(db: Session, notification_id: uuid.UUID, user_id: uuid.UUID) -> Notification | None:
-    stmt = select(Notification).where(Notification.id == notification_id, Notification.user_id == user_id)
+def mark_notification_read(
+    db: Session, notification_id: uuid.UUID, user_id: uuid.UUID
+) -> Notification | None:
+    stmt = select(Notification).where(
+        Notification.id == notification_id, Notification.user_id == user_id
+    )
     n = db.scalar(stmt)
     if n:
         n.read_at = datetime.now(timezone.utc)
@@ -226,8 +231,12 @@ def mark_notification_read(db: Session, notification_id: uuid.UUID, user_id: uui
     return n
 
 
-def mark_all_notifications_read(db: Session, user_id: uuid.UUID, restaurant_id: uuid.UUID | None = None) -> int:
-    stmt = select(Notification).where(Notification.user_id == user_id, Notification.read_at.is_(None))
+def mark_all_notifications_read(
+    db: Session, user_id: uuid.UUID, restaurant_id: uuid.UUID | None = None
+) -> int:
+    stmt = select(Notification).where(
+        Notification.user_id == user_id, Notification.read_at.is_(None)
+    )
     if restaurant_id:
         stmt = stmt.where(Notification.restaurant_id == restaurant_id)
     notifications = db.scalars(stmt).all()
@@ -239,7 +248,9 @@ def mark_all_notifications_read(db: Session, user_id: uuid.UUID, restaurant_id: 
     return count
 
 
-def get_user_notification_preferences(db: Session, user_id: uuid.UUID) -> Sequence[NotificationPreference]:
+def get_user_notification_preferences(
+    db: Session, user_id: uuid.UUID
+) -> Sequence[NotificationPreference]:
     stmt = select(NotificationPreference).where(NotificationPreference.user_id == user_id)
     return db.scalars(stmt).all()
 

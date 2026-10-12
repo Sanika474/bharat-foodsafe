@@ -6,7 +6,9 @@ from passlib.context import CryptContext
 from app.core.config import settings
 
 # Bcrypt password and PIN hashing context (12 rounds)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=settings.BCRYPT_ROUNDS)
+pwd_context = CryptContext(
+    schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=settings.BCRYPT_ROUNDS
+)
 
 
 def utc_now() -> datetime:

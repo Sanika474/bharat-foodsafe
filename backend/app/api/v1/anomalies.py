@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_db, get_tenant_context, require_roles
 from app.core.responses import success_response
 from app.core.tenant import TenantContext
-from app.modules.anomaly import repository, service
+from app.modules.anomaly import service
 
 router = APIRouter(prefix="/anomalies", tags=["Record-Integrity Anomaly Engine"])
 
@@ -53,10 +53,14 @@ def analyze_entry_anomaly(
     _role_guard: tuple = Depends(require_roles("MANAGER", "PLATFORM_ADMIN")),
 ):
     from app.models.tasks_and_rules import Entry
+
     entry = db.query(Entry).filter(Entry.id == entry_id).first()
     if not entry:
         from app.core.exceptions import AppException
-        raise AppException(code="ENTRY_NOT_FOUND", message=f"Entry '{entry_id}' not found.", status_code=404)
+
+        raise AppException(
+            code="ENTRY_NOT_FOUND", message=f"Entry '{entry_id}' not found.", status_code=404
+        )
 
     tenant_ctx.validate_tenant_access(entry.restaurant_id)
 

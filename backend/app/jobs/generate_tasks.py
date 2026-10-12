@@ -114,7 +114,9 @@ def generate_tasks_for_restaurant(
                 task_ids.append(task.id)
         except IntegrityError:
             skipped_count += 1
-            existing = repository.get_task_by_template_and_occurrence(db, template.id, occurrence_key)
+            existing = repository.get_task_by_template_and_occurrence(
+                db, template.id, occurrence_key
+            )
             if existing and existing.id not in task_ids:
                 task_ids.append(existing.id)
 

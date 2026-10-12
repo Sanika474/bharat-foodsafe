@@ -39,7 +39,9 @@ def mark_notification_read(
     db: Session = Depends(get_db),
     tenant_ctx: TenantContext = Depends(get_tenant_context),
 ):
-    item = service.mark_user_notification_read(db=db, tenant_ctx=tenant_ctx, notification_id=notification_id)
+    item = service.mark_user_notification_read(
+        db=db, tenant_ctx=tenant_ctx, notification_id=notification_id
+    )
     db.commit()
     return success_response(data=item.model_dump(mode="json"))
 
@@ -60,9 +62,7 @@ def get_notification_preferences(
     tenant_ctx: TenantContext = Depends(get_tenant_context),
 ):
     prefs = service.get_user_preferences(db=db, tenant_ctx=tenant_ctx)
-    return success_response(
-        data=[p.model_dump(mode="json") for p in prefs]
-    )
+    return success_response(data=[p.model_dump(mode="json") for p in prefs])
 
 
 @router.put("/preferences")

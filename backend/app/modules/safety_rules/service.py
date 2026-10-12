@@ -28,6 +28,7 @@ def evaluate_standalone(
     # If task_id provided, resolve template & category IDs from task
     if req.task_id:
         from app.modules.tasks import repository as task_repo
+
         task = task_repo.get_task_by_id(db, req.task_id)
         if not task:
             raise AppException(
@@ -85,6 +86,7 @@ def get_entry_evaluations(
 ) -> list[EntryEvaluationResponse]:
     from sqlalchemy import select
     from app.models.tasks_and_rules import Entry
+
     entry = db.scalar(select(Entry).where(Entry.id == entry_id))
     if not entry:
         raise AppException(

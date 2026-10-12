@@ -7,7 +7,7 @@ from app.core.tenant import TenantContext
 from app.models.analytics_and_incidents import AnomalyResult
 from app.models.tasks_and_rules import Entry
 from app.modules.anomaly import inference, repository
-from app.modules.anomaly.schema import AnomalyQueueItemResponse, AnomalyResultResponse
+from app.modules.anomaly.schema import AnomalyQueueItemResponse
 
 
 def evaluate_entry_anomaly(
@@ -52,6 +52,7 @@ def evaluate_entry_anomaly(
         )
 
         from app.modules.outbox.service import record_outbox_event
+
         record_outbox_event(
             db=db,
             event_type="ANOMALY_FLAGGED",
@@ -91,7 +92,11 @@ def list_anomalies(
     items = []
     for res in results:
         entry = res.entry
-        task_name = entry.task.template.name if entry and entry.task and entry.task.template else "Task Entry"
+        task_name = (
+            entry.task.template.name
+            if entry and entry.task and entry.task.template
+            else "Task Entry"
+        )
         user_name = entry.user.name if entry and entry.user else "Kitchen Staff"
         items.append(
             AnomalyQueueItemResponse(
@@ -118,12 +123,18 @@ def get_anomaly_by_id(
 ) -> AnomalyQueueItemResponse:
     res = repository.get_anomaly_result_by_id(db, anomaly_id)
     if not res:
-        raise AppException(code="ANOMALY_RESULT_NOT_FOUND", message=f"Anomaly result '{anomaly_id}' not found.", status_code=404)
+        raise AppException(
+            code="ANOMALY_RESULT_NOT_FOUND",
+            message=f"Anomaly result '{anomaly_id}' not found.",
+            status_code=404,
+        )
 
     entry = res.entry
     tenant_ctx.validate_tenant_access(entry.restaurant_id)
 
-    task_name = entry.task.template.name if entry and entry.task and entry.task.template else "Task Entry"
+    task_name = (
+        entry.task.template.name if entry and entry.task and entry.task.template else "Task Entry"
+    )
     user_name = entry.user.name if entry and entry.user else "Kitchen Staff"
 
     return AnomalyQueueItemResponse(

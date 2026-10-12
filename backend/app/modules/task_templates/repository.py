@@ -9,7 +9,9 @@ def get_category_by_id(db: Session, category_id: uuid.UUID) -> TaskCategory | No
     return db.query(TaskCategory).filter(TaskCategory.id == category_id).first()
 
 
-def get_template_by_id(db: Session, template_id: uuid.UUID, restaurant_id: uuid.UUID | None = None) -> TaskTemplate | None:
+def get_template_by_id(
+    db: Session, template_id: uuid.UUID, restaurant_id: uuid.UUID | None = None
+) -> TaskTemplate | None:
     query = db.query(TaskTemplate).filter(TaskTemplate.id == template_id)
     if restaurant_id:
         query = query.filter(TaskTemplate.restaurant_id == restaurant_id)
@@ -76,7 +78,9 @@ def get_latest_version(db: Session, template_id: uuid.UUID) -> TaskTemplateVersi
     )
 
 
-def get_version_by_number(db: Session, template_id: uuid.UUID, version_number: int) -> TaskTemplateVersion | None:
+def get_version_by_number(
+    db: Session, template_id: uuid.UUID, version_number: int
+) -> TaskTemplateVersion | None:
     return (
         db.query(TaskTemplateVersion)
         .filter(

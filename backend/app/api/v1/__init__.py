@@ -22,6 +22,3 @@ api_v1_router.include_router(safety_rules_router)
 api_v1_router.include_router(task_templates_router)
 api_v1_router.include_router(tasks_router)
 api_v1_router.include_router(uploads_router)
-
-
-

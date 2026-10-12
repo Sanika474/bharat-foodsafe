@@ -109,17 +109,41 @@ def exec_test_data(db_session: Session):
     db_session.add_all([staff_a1, staff_a2, manager_a, staff_b1])
     db_session.commit()
 
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=staff_a1.id, role_id=staff_role.id, restaurant_id=rest_a.id))
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=staff_a2.id, role_id=staff_role.id, restaurant_id=rest_a.id))
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=manager_a.id, role_id=manager_role.id, restaurant_id=rest_a.id))
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=staff_b1.id, role_id=staff_role.id, restaurant_id=rest_b.id))
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=staff_a1.id, role_id=staff_role.id, restaurant_id=rest_a.id
+        )
+    )
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=staff_a2.id, role_id=staff_role.id, restaurant_id=rest_a.id
+        )
+    )
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=manager_a.id, role_id=manager_role.id, restaurant_id=rest_a.id
+        )
+    )
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=staff_b1.id, role_id=staff_role.id, restaurant_id=rest_b.id
+        )
+    )
     db_session.commit()
 
     # Tokens
-    token_staff_a1, _ = create_access_token(user_id=staff_a1.id, tenant_id=rest_a.id, roles=["STAFF"])
-    token_staff_a2, _ = create_access_token(user_id=staff_a2.id, tenant_id=rest_a.id, roles=["STAFF"])
-    token_manager_a, _ = create_access_token(user_id=manager_a.id, tenant_id=rest_a.id, roles=["MANAGER"])
-    token_staff_b1, _ = create_access_token(user_id=staff_b1.id, tenant_id=rest_b.id, roles=["STAFF"])
+    token_staff_a1, _ = create_access_token(
+        user_id=staff_a1.id, tenant_id=rest_a.id, roles=["STAFF"]
+    )
+    token_staff_a2, _ = create_access_token(
+        user_id=staff_a2.id, tenant_id=rest_a.id, roles=["STAFF"]
+    )
+    token_manager_a, _ = create_access_token(
+        user_id=manager_a.id, tenant_id=rest_a.id, roles=["MANAGER"]
+    )
+    token_staff_b1, _ = create_access_token(
+        user_id=staff_b1.id, tenant_id=rest_b.id, roles=["STAFF"]
+    )
 
     # Task Category
     category = TaskCategory(
@@ -330,6 +354,7 @@ def exec_test_data(db_session: Session):
 # 1. Valid Task Execution & Entry Creation
 # ------------------------------------------------------------------------------
 
+
 def test_valid_task_execution_success(exec_test_data, db_session: Session):
     token = exec_test_data["token_staff_a1"]
     task_id = str(exec_test_data["task1"].id)
@@ -371,6 +396,7 @@ def test_valid_task_execution_success(exec_test_data, db_session: Session):
 # ------------------------------------------------------------------------------
 # 2. Assignment & Role Access Rules
 # ------------------------------------------------------------------------------
+
 
 def test_assigned_staff_can_execute_assigned_task(exec_test_data):
     token = exec_test_data["token_staff_a1"]
@@ -419,6 +445,7 @@ def test_manager_can_execute_assigned_task(exec_test_data):
 # ------------------------------------------------------------------------------
 # 3. Evidence & Equipment Validation
 # ------------------------------------------------------------------------------
+
 
 def test_missing_required_evidence_rejected(exec_test_data):
     token = exec_test_data["token_staff_a1"]
@@ -514,6 +541,7 @@ def test_cross_outlet_equipment_rejected(exec_test_data):
 # 4. Missing/Invalid Input Payload
 # ------------------------------------------------------------------------------
 
+
 def test_missing_all_value_fields_rejected(exec_test_data):
     token = exec_test_data["token_staff_a1"]
     task_id = str(exec_test_data["task1"].id)
@@ -531,6 +559,7 @@ def test_missing_all_value_fields_rejected(exec_test_data):
 # ------------------------------------------------------------------------------
 # 5. Persistent Idempotency Replay & Key Conflict
 # ------------------------------------------------------------------------------
+
 
 def test_idempotency_replay_returns_cached_response(exec_test_data, db_session: Session):
     token = exec_test_data["token_staff_a1"]
@@ -608,8 +637,12 @@ def test_concurrent_duplicate_submission_processing_conflict(exec_test_data, db_
 
     payload = {"value_numeric": 3.8, "unit": "C"}
     req_dto = TaskEntryCreateRequest(**payload)
-    import json, hashlib
-    expected_hash = hashlib.sha256(json.dumps(req_dto.model_dump(mode="json"), sort_keys=True).encode()).hexdigest()
+    import json
+    import hashlib
+
+    expected_hash = hashlib.sha256(
+        json.dumps(req_dto.model_dump(mode="json"), sort_keys=True).encode()
+    ).hexdigest()
 
     # Pre-insert an IdempotencyKey row in 'PROCESSING' status with matching request_hash
     key_record = IdempotencyKey(
@@ -640,6 +673,7 @@ def test_concurrent_duplicate_submission_processing_conflict(exec_test_data, db_
 # 6. Cross-Tenant Access & Authorization Rules
 # ------------------------------------------------------------------------------
 
+
 def test_cross_tenant_task_execution_forbidden(exec_test_data):
     token_staff_b1 = exec_test_data["token_staff_b1"]  # Staff at Rest B
     task1_id = str(exec_test_data["task1"].id)  # Task at Rest A
@@ -666,6 +700,7 @@ def test_unauthenticated_request_rejected():
 # ------------------------------------------------------------------------------
 # 7. Already Completed Task Execution Rules
 # ------------------------------------------------------------------------------
+
 
 def test_already_completed_task_reexecution_rejected(exec_test_data):
     token = exec_test_data["token_staff_a1"]

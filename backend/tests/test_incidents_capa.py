@@ -10,8 +10,6 @@ from app.main import app
 from app.models.analytics_and_incidents import CorrectiveAction, Incident
 from app.models.identity import Restaurant, Role, User, UserRole
 from app.models.tasks_and_rules import (
-    Equipment,
-    EvidenceFile,
     RuleSource,
     SafetyRule,
     SafetyRuleBinding,
@@ -107,17 +105,41 @@ def incident_test_data(db_session: Session):
     db_session.add_all([staff_a1, staff_a2, manager_a, staff_b1])
     db_session.commit()
 
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=staff_a1.id, role_id=staff_role.id, restaurant_id=rest_a.id))
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=staff_a2.id, role_id=staff_role.id, restaurant_id=rest_a.id))
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=manager_a.id, role_id=manager_role.id, restaurant_id=rest_a.id))
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=staff_b1.id, role_id=staff_role.id, restaurant_id=rest_b.id))
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=staff_a1.id, role_id=staff_role.id, restaurant_id=rest_a.id
+        )
+    )
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=staff_a2.id, role_id=staff_role.id, restaurant_id=rest_a.id
+        )
+    )
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=manager_a.id, role_id=manager_role.id, restaurant_id=rest_a.id
+        )
+    )
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=staff_b1.id, role_id=staff_role.id, restaurant_id=rest_b.id
+        )
+    )
     db_session.commit()
 
     # JWT Tokens
-    token_staff_a1, _ = create_access_token(user_id=staff_a1.id, tenant_id=rest_a.id, roles=["STAFF"])
-    token_staff_a2, _ = create_access_token(user_id=staff_a2.id, tenant_id=rest_a.id, roles=["STAFF"])
-    token_manager_a, _ = create_access_token(user_id=manager_a.id, tenant_id=rest_a.id, roles=["MANAGER"])
-    token_staff_b1, _ = create_access_token(user_id=staff_b1.id, tenant_id=rest_b.id, roles=["STAFF"])
+    token_staff_a1, _ = create_access_token(
+        user_id=staff_a1.id, tenant_id=rest_a.id, roles=["STAFF"]
+    )
+    token_staff_a2, _ = create_access_token(
+        user_id=staff_a2.id, tenant_id=rest_a.id, roles=["STAFF"]
+    )
+    token_manager_a, _ = create_access_token(
+        user_id=manager_a.id, tenant_id=rest_a.id, roles=["MANAGER"]
+    )
+    token_staff_b1, _ = create_access_token(
+        user_id=staff_b1.id, tenant_id=rest_b.id, roles=["STAFF"]
+    )
 
     # Rule Source
     rule_source = RuleSource(
@@ -260,6 +282,7 @@ def incident_test_data(db_session: Session):
 # 1. Automatic CRITICAL -> Incident & CAPA Creation
 # ------------------------------------------------------------------------------
 
+
 def test_automatic_critical_incident_creation(incident_test_data, db_session: Session):
     token = incident_test_data["token_staff_a1"]
     task_id = str(incident_test_data["task1"].id)
@@ -295,6 +318,7 @@ def test_automatic_critical_incident_creation(incident_test_data, db_session: Se
 # ------------------------------------------------------------------------------
 # 2. NORMAL & DEVIATION Do Not Create Incidents
 # ------------------------------------------------------------------------------
+
 
 def test_normal_reading_does_not_create_incident(incident_test_data, db_session: Session):
     token = incident_test_data["token_staff_a1"]
@@ -338,6 +362,7 @@ def test_deviation_reading_does_not_create_incident(incident_test_data, db_sessi
 # 3. Duplicate Prevention & Idempotency
 # ------------------------------------------------------------------------------
 
+
 def test_duplicate_incident_creation_prevented(incident_test_data, db_session: Session):
     from app.modules.incidents import service as inc_service
 
@@ -355,8 +380,12 @@ def test_duplicate_incident_creation_prevented(incident_test_data, db_session: S
     db_session.commit()
 
     # Trigger incident creation twice for same entry
-    inc1 = inc_service.trigger_critical_deviation_incident(db_session, entry, incident_test_data["task1"])
-    inc2 = inc_service.trigger_critical_deviation_incident(db_session, entry, incident_test_data["task1"])
+    inc1 = inc_service.trigger_critical_deviation_incident(
+        db_session, entry, incident_test_data["task1"]
+    )
+    inc2 = inc_service.trigger_critical_deviation_incident(
+        db_session, entry, incident_test_data["task1"]
+    )
 
     assert inc1.id == inc2.id
 
@@ -367,6 +396,7 @@ def test_duplicate_incident_creation_prevented(incident_test_data, db_session: S
 # ------------------------------------------------------------------------------
 # 4. Manager Assignment of CAPA
 # ------------------------------------------------------------------------------
+
 
 def test_manager_assignment_of_capa_success(incident_test_data, db_session: Session):
     # Create incident + CAPA
@@ -388,7 +418,10 @@ def test_manager_assignment_of_capa_success(incident_test_data, db_session: Sess
 
     assign_res = client.post(
         f"/api/v1/corrective-actions/{ca.id}/assign",
-        json={"assigned_to": staff_a2_id, "action_text": "Adjust chiller thermostat and re-check in 15 mins."},
+        json={
+            "assigned_to": staff_a2_id,
+            "action_text": "Adjust chiller thermostat and re-check in 15 mins.",
+        },
         headers={"Authorization": f"Bearer {token_manager}"},
     )
     assert assign_res.status_code == 200
@@ -431,6 +464,7 @@ def test_staff_cannot_assign_capa(incident_test_data, db_session: Session):
 # 5. Staff Corrective Action & Recheck Workflow
 # ------------------------------------------------------------------------------
 
+
 def test_staff_complete_recheck_success(incident_test_data, db_session: Session):
     token_staff1 = incident_test_data["token_staff_a1"]
     token_staff2 = incident_test_data["token_staff_a2"]
@@ -456,7 +490,11 @@ def test_staff_complete_recheck_success(incident_test_data, db_session: Session)
     # 3. Assigned Staff 2 completes CAPA with SAFE reading (3.5 °C)
     complete_res = client.post(
         f"/api/v1/corrective-actions/{ca.id}/complete",
-        json={"value_numeric": 3.5, "unit": "C", "notes": "Thermostat reset. Temperature restored to 3.5C."},
+        json={
+            "value_numeric": 3.5,
+            "unit": "C",
+            "notes": "Thermostat reset. Temperature restored to 3.5C.",
+        },
         headers={"Authorization": f"Bearer {token_staff2}"},
     )
     assert complete_res.status_code == 200
@@ -494,7 +532,11 @@ def test_recheck_still_critical_rejected(incident_test_data, db_session: Session
     # Staff submits ANOTHER CRITICAL reading (8.5 °C > 7.0 °C)
     complete_res = client.post(
         f"/api/v1/corrective-actions/{ca.id}/complete",
-        json={"value_numeric": 8.5, "unit": "C", "notes": "Attempted thermostat fix but still hot."},
+        json={
+            "value_numeric": 8.5,
+            "unit": "C",
+            "notes": "Attempted thermostat fix but still hot.",
+        },
         headers={"Authorization": f"Bearer {token_staff1}"},
     )
     assert complete_res.status_code == 422
@@ -540,6 +582,7 @@ def test_unassigned_staff_cannot_complete_assigned_capa(incident_test_data, db_s
 # ------------------------------------------------------------------------------
 # 6. Manager Verification & Closure Workflow
 # ------------------------------------------------------------------------------
+
 
 def test_manager_verification_and_incident_closure(incident_test_data, db_session: Session):
     token_staff1 = incident_test_data["token_staff_a1"]
@@ -603,7 +646,10 @@ def test_manager_verification_rejection_reopens_capa(incident_test_data, db_sess
     # Manager rejects verification (e.g. invalid documentation)
     verify_res = client.post(
         f"/api/v1/corrective-actions/{ca.id}/verify",
-        json={"approved": False, "notes": "Physical photo evidence is missing. Re-do check with evidence photo."},
+        json={
+            "approved": False,
+            "notes": "Physical photo evidence is missing. Re-do check with evidence photo.",
+        },
         headers={"Authorization": f"Bearer {token_manager}"},
     )
     assert verify_res.status_code == 200
@@ -617,6 +663,7 @@ def test_manager_verification_rejection_reopens_capa(incident_test_data, db_sess
 # ------------------------------------------------------------------------------
 # 7. Prohibited Direct Status Mutations
 # ------------------------------------------------------------------------------
+
 
 def test_direct_incident_status_patch_prohibited(incident_test_data, db_session: Session):
     token_manager = incident_test_data["token_manager_a"]
@@ -664,6 +711,7 @@ def test_direct_corrective_action_status_patch_prohibited(incident_test_data, db
 # ------------------------------------------------------------------------------
 # 8. Cross-Tenant Isolation & Authorization
 # ------------------------------------------------------------------------------
+
 
 def test_cross_tenant_incident_access_forbidden(incident_test_data, db_session: Session):
     token_staff1 = incident_test_data["token_staff_a1"]

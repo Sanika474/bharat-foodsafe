@@ -8,14 +8,35 @@ VALID_EQUIPMENT_STATUSES = {"OPERATIONAL", "MAINTENANCE", "DECOMMISSIONED"}
 
 
 class EquipmentCreate(BaseModel):
-    restaurant_id: uuid.UUID | None = Field(default=None, description="Restaurant outlet ID (defaults to TenantContext)")
-    name: str = Field(min_length=2, max_length=200, description="Equipment display name (e.g., Walk-In Chiller #1)")
-    equipment_type: str = Field(min_length=2, max_length=80, description="Equipment type classification (e.g., CHILLER, FREEZER, DISHWASHER)")
-    location: str | None = Field(default=None, max_length=120, description="Kitchen location label (e.g., Prep Area Line 2)")
-    serial_number: str | None = Field(default=None, max_length=100, description="Equipment serial or asset tag number")
-    min_temp: Decimal | float | None = Field(default=None, description="Minimum safe operational temperature limit")
-    max_temp: Decimal | float | None = Field(default=None, description="Maximum safe operational temperature limit")
-    status: str = Field(default="OPERATIONAL", description="Operational status: OPERATIONAL, MAINTENANCE, DECOMMISSIONED")
+    restaurant_id: uuid.UUID | None = Field(
+        default=None, description="Restaurant outlet ID (defaults to TenantContext)"
+    )
+    name: str = Field(
+        min_length=2,
+        max_length=200,
+        description="Equipment display name (e.g., Walk-In Chiller #1)",
+    )
+    equipment_type: str = Field(
+        min_length=2,
+        max_length=80,
+        description="Equipment type classification (e.g., CHILLER, FREEZER, DISHWASHER)",
+    )
+    location: str | None = Field(
+        default=None, max_length=120, description="Kitchen location label (e.g., Prep Area Line 2)"
+    )
+    serial_number: str | None = Field(
+        default=None, max_length=100, description="Equipment serial or asset tag number"
+    )
+    min_temp: Decimal | float | None = Field(
+        default=None, description="Minimum safe operational temperature limit"
+    )
+    max_temp: Decimal | float | None = Field(
+        default=None, description="Maximum safe operational temperature limit"
+    )
+    status: str = Field(
+        default="OPERATIONAL",
+        description="Operational status: OPERATIONAL, MAINTENANCE, DECOMMISSIONED",
+    )
 
     @field_validator("status")
     @classmethod

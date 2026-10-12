@@ -160,14 +160,16 @@ def verify_audit_chain(
     for idx, record in enumerate(records):
         # 1. Check previous_hash linkage
         if record.previous_hash != expected_previous_hash:
-            errors.append({
-                "record_id": str(record.id),
-                "index": idx,
-                "error_type": "PREVIOUS_HASH_MISMATCH",
-                "expected_previous_hash": expected_previous_hash,
-                "found_previous_hash": record.previous_hash,
-                "message": f"Linkage break at index {idx}: previous_hash '{record.previous_hash}' does not match expected '{expected_previous_hash}'."
-            })
+            errors.append(
+                {
+                    "record_id": str(record.id),
+                    "index": idx,
+                    "error_type": "PREVIOUS_HASH_MISMATCH",
+                    "expected_previous_hash": expected_previous_hash,
+                    "found_previous_hash": record.previous_hash,
+                    "message": f"Linkage break at index {idx}: previous_hash '{record.previous_hash}' does not match expected '{expected_previous_hash}'.",
+                }
+            )
 
         # 2. Re-compute hash and check payload integrity
         created_at_iso = format_datetime_canonical(record.created_at) if record.created_at else ""
@@ -183,14 +185,16 @@ def verify_audit_chain(
         )
 
         if record.record_hash != expected_hash:
-            errors.append({
-                "record_id": str(record.id),
-                "index": idx,
-                "error_type": "TAMPERED_RECORD_HASH",
-                "expected_record_hash": expected_hash,
-                "found_record_hash": record.record_hash,
-                "message": f"Tampering detected at index {idx}: computed hash '{expected_hash}' does not match stored '{record.record_hash}'."
-            })
+            errors.append(
+                {
+                    "record_id": str(record.id),
+                    "index": idx,
+                    "error_type": "TAMPERED_RECORD_HASH",
+                    "expected_record_hash": expected_hash,
+                    "found_record_hash": record.record_hash,
+                    "message": f"Tampering detected at index {idx}: computed hash '{expected_hash}' does not match stored '{record.record_hash}'.",
+                }
+            )
 
         # Set next record's expected previous_hash to current stored record_hash
         expected_previous_hash = record.record_hash
@@ -214,6 +218,7 @@ def list_audit_logs(
     limit: int = 50,
 ) -> tuple[Sequence[AuditLog], int]:
     from sqlalchemy import and_, func
+
     stmt = select(AuditLog)
     count_stmt = select(func.count(AuditLog.id))
 

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppException
 from app.core.tenant import TenantContext
-from app.models.analytics_and_incidents import CorrectiveAction, Incident
+from app.models.analytics_and_incidents import Incident
 from app.models.tasks_and_rules import Entry, Task
 from app.modules.incidents import repository
 from app.modules.incidents.schema import (
@@ -37,12 +37,18 @@ def trigger_critical_deviation_incident(
     crit_reasons = []
     if evaluation_details:
         for d in evaluation_details:
-            outcome = getattr(d, "outcome", None) or d.get("outcome") if isinstance(d, dict) else None
+            outcome = (
+                getattr(d, "outcome", None) or d.get("outcome") if isinstance(d, dict) else None
+            )
             reason = getattr(d, "reason", None) or d.get("reason") if isinstance(d, dict) else None
             if outcome == "CRITICAL" and reason:
                 crit_reasons.append(reason)
 
-    description = " | ".join(crit_reasons) if crit_reasons else f"Critical food safety boundary breached during task '{task_name}' execution."
+    description = (
+        " | ".join(crit_reasons)
+        if crit_reasons
+        else f"Critical food safety boundary breached during task '{task_name}' execution."
+    )
 
     # 2. Create Incident row (status='OPEN', severity='CRITICAL')
     incident = repository.create_incident(
@@ -66,6 +72,7 @@ def trigger_critical_deviation_incident(
     )
 
     from app.core.audit import record_audit_event
+
     record_audit_event(
         db=db,
         event_name="INCIDENT_CREATED",
@@ -73,10 +80,15 @@ def trigger_critical_deviation_incident(
         restaurant_id=entry.restaurant_id,
         user_id=entry.user_id,
         resource_id=incident.id,
-        payload_jsonb={"entry_id": str(entry.id), "severity": incident.severity, "status": incident.status},
+        payload_jsonb={
+            "entry_id": str(entry.id),
+            "severity": incident.severity,
+            "status": incident.status,
+        },
     )
 
     from app.modules.outbox.service import record_outbox_event
+
     record_outbox_event(
         db=db,
         event_type="INCIDENT_CREATED",
@@ -104,7 +116,11 @@ def start_incident(
 ) -> IncidentResponse:
     incident = repository.get_incident_by_id(db, incident_id)
     if not incident:
-        raise AppException(code="INCIDENT_NOT_FOUND", message=f"Incident '{incident_id}' not found.", status_code=404)
+        raise AppException(
+            code="INCIDENT_NOT_FOUND",
+            message=f"Incident '{incident_id}' not found.",
+            status_code=404,
+        )
 
     tenant_ctx.validate_tenant_access(incident.restaurant_id)
 
@@ -123,13 +139,21 @@ def assign_corrective_action(
 ) -> CorrectiveActionResponse:
     ca = repository.get_corrective_action_by_id(db, ca_id)
     if not ca:
-        raise AppException(code="CAPA_NOT_FOUND", message=f"Corrective action '{ca_id}' not found.", status_code=404)
+        raise AppException(
+            code="CAPA_NOT_FOUND",
+            message=f"Corrective action '{ca_id}' not found.",
+            status_code=404,
+        )
 
     tenant_ctx.validate_tenant_access(ca.incident.restaurant_id)
 
     # Only Manager / Platform Admin can assign CAPA
     if not ("MANAGER" in tenant_ctx.roles or tenant_ctx.is_platform_admin()):
-        raise AppException(code="INSUFFICIENT_PERMISSIONS", message="Only managers can assign corrective actions.", status_code=403)
+        raise AppException(
+            code="INSUFFICIENT_PERMISSIONS",
+            message="Only managers can assign corrective actions.",
+            status_code=403,
+        )
 
     action_text = req.action_text or ca.action_text
 
@@ -146,6 +170,7 @@ def assign_corrective_action(
         repository.update_incident_status(db, ca.incident, status="INVESTIGATING")
 
     from app.core.audit import record_audit_event
+
     record_audit_event(
         db=db,
         event_name="CAPA_ASSIGNED",
@@ -157,6 +182,7 @@ def assign_corrective_action(
     )
 
     from app.modules.outbox.service import record_outbox_event
+
     record_outbox_event(
         db=db,
         event_type="CAPA_ASSIGNED",
@@ -188,7 +214,11 @@ def complete_corrective_action_recheck(
     """
     ca = repository.get_corrective_action_by_id(db, ca_id)
     if not ca:
-        raise AppException(code="CAPA_NOT_FOUND", message=f"Corrective action '{ca_id}' not found.", status_code=404)
+        raise AppException(
+            code="CAPA_NOT_FOUND",
+            message=f"Corrective action '{ca_id}' not found.",
+            status_code=404,
+        )
 
     incident = ca.incident
     tenant_ctx.validate_tenant_access(incident.restaurant_id)
@@ -197,28 +227,46 @@ def complete_corrective_action_recheck(
     is_manager_or_admin = "MANAGER" in tenant_ctx.roles or tenant_ctx.is_platform_admin()
     if not is_manager_or_admin:
         if ca.assigned_to and ca.assigned_to != tenant_ctx.user_id:
-            raise AppException(code="TASK_ASSIGNMENT_DENIED", message="User is not assigned to this corrective action.", status_code=403)
+            raise AppException(
+                code="TASK_ASSIGNMENT_DENIED",
+                message="User is not assigned to this corrective action.",
+                status_code=403,
+            )
 
     # 1. Fetch original task to associate recheck entry
     original_entry = incident.entry
     if not original_entry:
-        raise AppException(code="ENTRY_NOT_FOUND", message="Original entry associated with incident not found.", status_code=404)
+        raise AppException(
+            code="ENTRY_NOT_FOUND",
+            message="Original entry associated with incident not found.",
+            status_code=404,
+        )
 
     task = original_entry.task
 
     # Validate template evidence requirement if applicable
     template_version = task.template_version
-    config = template_version.configuration_jsonb if template_version and template_version.configuration_jsonb else {}
+    config = (
+        template_version.configuration_jsonb
+        if template_version and template_version.configuration_jsonb
+        else {}
+    )
     if config.get("requires_evidence", False) and not req.evidence_file_id:
         raise AppException(
             code="ENTRY_EVIDENCE_REQUIRED",
             message="Photo evidence is required for this re-check.",
             status_code=422,
-            details=[{"field": "evidence_file_id", "issue": "Field cannot be null for tasks requiring physical photo verification."}],
+            details=[
+                {
+                    "field": "evidence_file_id",
+                    "issue": "Field cannot be null for tasks requiring physical photo verification.",
+                }
+            ],
         )
 
     # 2. Create Re-check Entry
     from app.modules.tasks import repository as task_repo
+
     recheck_entry = task_repo.create_entry(
         db=db,
         restaurant_id=incident.restaurant_id,
@@ -236,6 +284,7 @@ def complete_corrective_action_recheck(
 
     # 3. Run Deterministic Safety Rules Engine on re-check reading
     from app.modules.safety_rules.engine import evaluate_and_persist_entry_safety
+
     recheck_result = evaluate_and_persist_entry_safety(db, recheck_entry, task)
 
     # 4. Check Re-check Safety Evaluation Outcome
@@ -256,7 +305,9 @@ def complete_corrective_action_recheck(
             code="RECHECK_STILL_CRITICAL",
             message="Re-check value is still in CRITICAL deviation range. Action cannot be completed.",
             status_code=422,
-            details=[{"field": "value", "issue": "Re-check value breached critical safety threshold."}],
+            details=[
+                {"field": "value", "issue": "Re-check value breached critical safety threshold."}
+            ],
         )
 
     # Recheck Passed (NORMAL or DEVIATION) -> Transition CAPA status to VERIFIED (or ready for manager verification)
@@ -271,6 +322,7 @@ def complete_corrective_action_recheck(
     repository.update_incident_status(db, incident, status="RESOLVED")
 
     from app.core.audit import record_audit_event
+
     record_audit_event(
         db=db,
         event_name="CAPA_COMPLETED",
@@ -298,14 +350,22 @@ def verify_corrective_action(
     """
     ca = repository.get_corrective_action_by_id(db, ca_id)
     if not ca:
-        raise AppException(code="CAPA_NOT_FOUND", message=f"Corrective action '{ca_id}' not found.", status_code=404)
+        raise AppException(
+            code="CAPA_NOT_FOUND",
+            message=f"Corrective action '{ca_id}' not found.",
+            status_code=404,
+        )
 
     incident = ca.incident
     tenant_ctx.validate_tenant_access(incident.restaurant_id)
 
     # Only Manager / Platform Admin can verify
     if not ("MANAGER" in tenant_ctx.roles or tenant_ctx.is_platform_admin()):
-        raise AppException(code="INSUFFICIENT_PERMISSIONS", message="Only managers can verify corrective actions.", status_code=403)
+        raise AppException(
+            code="INSUFFICIENT_PERMISSIONS",
+            message="Only managers can verify corrective actions.",
+            status_code=403,
+        )
 
     if req.approved:
         # Verified & Approved -> Close Incident
@@ -325,11 +385,13 @@ def verify_corrective_action(
             db=db,
             ca=ca,
             status="IN_PROGRESS",
-            notes=req.notes or "Manager rejected verification. Please upload legible photo and re-submit.",
+            notes=req.notes
+            or "Manager rejected verification. Please upload legible photo and re-submit.",
         )
         repository.update_incident_status(db, incident, status="INVESTIGATING", resolved_at=None)
 
     from app.core.audit import record_audit_event
+
     record_audit_event(
         db=db,
         event_name="CAPA_VERIFIED",
@@ -337,10 +399,15 @@ def verify_corrective_action(
         restaurant_id=incident.restaurant_id,
         user_id=tenant_ctx.user_id,
         resource_id=ca.id,
-        payload_jsonb={"approved": req.approved, "incident_status": incident.status, "ca_status": ca.status},
+        payload_jsonb={
+            "approved": req.approved,
+            "incident_status": incident.status,
+            "ca_status": ca.status,
+        },
     )
 
     from app.modules.outbox.service import record_outbox_event
+
     record_outbox_event(
         db=db,
         event_type="CAPA_VERIFIED",
@@ -378,7 +445,9 @@ def list_incidents(
     limit: int = 50,
 ) -> tuple[list[IncidentResponse], int]:
     restaurant_id = None if tenant_ctx.is_platform_admin() else tenant_ctx.restaurant_id
-    incidents, total = repository.list_incidents(db, restaurant_id=restaurant_id, status=status, severity=severity, skip=skip, limit=limit)
+    incidents, total = repository.list_incidents(
+        db, restaurant_id=restaurant_id, status=status, severity=severity, skip=skip, limit=limit
+    )
     return [IncidentResponse.model_validate(inc) for inc in incidents], total
 
 
@@ -389,7 +458,11 @@ def get_incident_by_id(
 ) -> IncidentResponse:
     incident = repository.get_incident_by_id(db, incident_id)
     if not incident:
-        raise AppException(code="INCIDENT_NOT_FOUND", message=f"Incident '{incident_id}' not found.", status_code=404)
+        raise AppException(
+            code="INCIDENT_NOT_FOUND",
+            message=f"Incident '{incident_id}' not found.",
+            status_code=404,
+        )
     tenant_ctx.validate_tenant_access(incident.restaurant_id)
     return IncidentResponse.model_validate(incident)
 
@@ -403,7 +476,14 @@ def list_corrective_actions(
     limit: int = 50,
 ) -> tuple[list[CorrectiveActionResponse], int]:
     restaurant_id = None if tenant_ctx.is_platform_admin() else tenant_ctx.restaurant_id
-    cas, total = repository.list_corrective_actions(db, restaurant_id=restaurant_id, status=status, assigned_to=assigned_to, skip=skip, limit=limit)
+    cas, total = repository.list_corrective_actions(
+        db,
+        restaurant_id=restaurant_id,
+        status=status,
+        assigned_to=assigned_to,
+        skip=skip,
+        limit=limit,
+    )
     return [CorrectiveActionResponse.model_validate(ca) for ca in cas], total
 
 
@@ -414,6 +494,10 @@ def get_corrective_action_by_id(
 ) -> CorrectiveActionResponse:
     ca = repository.get_corrective_action_by_id(db, ca_id)
     if not ca:
-        raise AppException(code="CAPA_NOT_FOUND", message=f"Corrective action '{ca_id}' not found.", status_code=404)
+        raise AppException(
+            code="CAPA_NOT_FOUND",
+            message=f"Corrective action '{ca_id}' not found.",
+            status_code=404,
+        )
     tenant_ctx.validate_tenant_access(ca.incident.restaurant_id)
     return CorrectiveActionResponse.model_validate(ca)

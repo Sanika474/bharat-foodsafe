@@ -4,8 +4,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.analytics_and_incidents import AnomalyResult
-from app.models.identity import User
-from app.models.tasks_and_rules import Entry, Task, TaskTemplate
+from app.models.tasks_and_rules import Entry, Task
 
 
 def get_anomaly_result_by_id(db: Session, anomaly_id: uuid.UUID) -> AnomalyResult | None:
@@ -47,7 +46,9 @@ def list_anomaly_results(
             joinedload(AnomalyResult.entry).joinedload(Entry.user),
         )
     )
-    count_stmt = select(func.count(AnomalyResult.id)).join(Entry, AnomalyResult.entry_id == Entry.id)
+    count_stmt = select(func.count(AnomalyResult.id)).join(
+        Entry, AnomalyResult.entry_id == Entry.id
+    )
 
     filters = []
     if restaurant_id:

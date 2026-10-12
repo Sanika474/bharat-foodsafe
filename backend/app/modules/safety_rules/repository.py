@@ -9,8 +9,6 @@ from app.models.tasks_and_rules import (
     RuleSource,
     SafetyRule,
     SafetyRuleBinding,
-    TaskCategory,
-    TaskTemplate,
 )
 
 
@@ -116,7 +114,7 @@ def get_applicable_rules(
         .options(joinedload(SafetyRule.rule_source))
         .where(
             and_(
-                SafetyRule.is_active == True,
+                SafetyRule.is_active,
                 RuleSource.review_status == "VERIFIED",
                 or_(*binding_conditions),
             )
@@ -157,7 +155,7 @@ def list_active_rules(
         .options(joinedload(SafetyRule.rule_source), joinedload(SafetyRule.bindings))
         .where(
             and_(
-                SafetyRule.is_active == True,
+                SafetyRule.is_active,
                 RuleSource.review_status == "VERIFIED",
             )
         )

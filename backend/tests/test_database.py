@@ -17,9 +17,13 @@ def test_database_connection_and_version():
 def test_database_tables_exist():
     db = SessionLocal()
     try:
-        tables_res = db.execute(
-            text("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-        ).scalars().all()
+        tables_res = (
+            db.execute(
+                text("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+            )
+            .scalars()
+            .all()
+        )
         assert len(tables_res) == 38  # 37 app tables + alembic_version
         assert "restaurants" in tables_res
         assert "users" in tables_res
@@ -41,10 +45,16 @@ def test_seed_data_validation():
         if not demo_rest:
             import sys
             from pathlib import Path
+
             root_dir = str(Path(__file__).resolve().parents[2])
             if root_dir not in sys.path:
                 sys.path.insert(0, root_dir)
-            from database.seeds.run_all import seed_demo_tenant, seed_reference_data, seed_roles_and_permissions
+            from database.seeds.run_all import (
+                seed_demo_tenant,
+                seed_reference_data,
+                seed_roles_and_permissions,
+            )
+
             seed_roles_and_permissions(db)
             demo_rest = seed_demo_tenant(db)
             seed_reference_data(db, demo_rest)

@@ -1,4 +1,3 @@
-import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,7 +9,9 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Database Connection
-    DATABASE_URL: str = "postgresql+psycopg://foodsafety:foodsafe_pass_2026@localhost:5432/bharat_foodsafe"
+    DATABASE_URL: str = (
+        "postgresql+psycopg://foodsafety:foodsafe_pass_2026@localhost:5432/bharat_foodsafe"
+    )
     DATABASE_POOL_SIZE: int = 20
     DATABASE_MAX_OVERFLOW: int = 10
     DATABASE_POOL_TIMEOUT: int = 30
@@ -50,11 +51,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "json"
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 settings = Settings()

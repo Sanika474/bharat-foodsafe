@@ -71,7 +71,11 @@ def equipment_test_data(db_session: Session):
         status="ACTIVE",
     )
     db_session.add(manager_a)
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=manager_a.id, role_id=manager_role.id, restaurant_id=rest_a.id))
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=manager_a.id, role_id=manager_role.id, restaurant_id=rest_a.id
+        )
+    )
 
     # Create Staff for Restaurant A
     staff_a = User(
@@ -82,7 +86,11 @@ def equipment_test_data(db_session: Session):
         status="ACTIVE",
     )
     db_session.add(staff_a)
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=staff_a.id, role_id=staff_role.id, restaurant_id=rest_a.id))
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=staff_a.id, role_id=staff_role.id, restaurant_id=rest_a.id
+        )
+    )
 
     # Create Manager for Restaurant B
     manager_b = User(
@@ -93,13 +101,21 @@ def equipment_test_data(db_session: Session):
         status="ACTIVE",
     )
     db_session.add(manager_b)
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=manager_b.id, role_id=manager_role.id, restaurant_id=rest_b.id))
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=manager_b.id, role_id=manager_role.id, restaurant_id=rest_b.id
+        )
+    )
 
     db_session.commit()
 
-    token_mgr_a, _ = create_access_token(user_id=manager_a.id, tenant_id=rest_a.id, roles=["MANAGER"])
+    token_mgr_a, _ = create_access_token(
+        user_id=manager_a.id, tenant_id=rest_a.id, roles=["MANAGER"]
+    )
     token_staff_a, _ = create_access_token(user_id=staff_a.id, tenant_id=rest_a.id, roles=["STAFF"])
-    token_mgr_b, _ = create_access_token(user_id=manager_b.id, tenant_id=rest_b.id, roles=["MANAGER"])
+    token_mgr_b, _ = create_access_token(
+        user_id=manager_b.id, tenant_id=rest_b.id, roles=["MANAGER"]
+    )
 
     yield {
         "rest_a": rest_a,
@@ -117,18 +133,19 @@ def equipment_test_data(db_session: Session):
     db_session.query(UserRole).filter(
         UserRole.user_id.in_([manager_a.id, staff_a.id, manager_b.id])
     ).delete(synchronize_session=False)
-    db_session.query(User).filter(
-        User.id.in_([manager_a.id, staff_a.id, manager_b.id])
-    ).delete(synchronize_session=False)
-    db_session.query(Restaurant).filter(
-        Restaurant.id.in_([rest_a.id, rest_b.id])
-    ).delete(synchronize_session=False)
+    db_session.query(User).filter(User.id.in_([manager_a.id, staff_a.id, manager_b.id])).delete(
+        synchronize_session=False
+    )
+    db_session.query(Restaurant).filter(Restaurant.id.in_([rest_a.id, rest_b.id])).delete(
+        synchronize_session=False
+    )
     db_session.commit()
 
 
 # ------------------------------------------------------------------------------
 # 1. Equipment Creation & Validation Tests
 # ------------------------------------------------------------------------------
+
 
 def test_create_equipment_success(equipment_test_data):
     token = equipment_test_data["token_mgr_a"]
@@ -143,7 +160,9 @@ def test_create_equipment_success(equipment_test_data):
         "status": "OPERATIONAL",
     }
 
-    res = client.post("/api/v1/equipment", json=payload, headers={"Authorization": f"Bearer {token}"})
+    res = client.post(
+        "/api/v1/equipment", json=payload, headers={"Authorization": f"Bearer {token}"}
+    )
     assert res.status_code == 201
     body = res.json()
 
@@ -167,7 +186,9 @@ def test_create_equipment_invalid_temperature_range(equipment_test_data):
         "max_temp": 2.0,
     }
 
-    res = client.post("/api/v1/equipment", json=payload, headers={"Authorization": f"Bearer {token}"})
+    res = client.post(
+        "/api/v1/equipment", json=payload, headers={"Authorization": f"Bearer {token}"}
+    )
     assert res.status_code == 422
     body = res.json()
     assert body["success"] is False
@@ -183,7 +204,9 @@ def test_create_equipment_invalid_status(equipment_test_data):
         "status": "INVALID_STATUS_CODE",
     }
 
-    res = client.post("/api/v1/equipment", json=payload, headers={"Authorization": f"Bearer {token}"})
+    res = client.post(
+        "/api/v1/equipment", json=payload, headers={"Authorization": f"Bearer {token}"}
+    )
     assert res.status_code == 422
 
 
@@ -195,7 +218,9 @@ def test_create_equipment_staff_forbidden(equipment_test_data):
         "equipment_type": "DISHWASHER",
     }
 
-    res = client.post("/api/v1/equipment", json=payload, headers={"Authorization": f"Bearer {token}"})
+    res = client.post(
+        "/api/v1/equipment", json=payload, headers={"Authorization": f"Bearer {token}"}
+    )
     assert res.status_code == 403
     assert res.json()["error"]["code"] == "INSUFFICIENT_PERMISSIONS"
 
@@ -204,13 +229,19 @@ def test_create_equipment_staff_forbidden(equipment_test_data):
 # 2. Equipment CRUD & Update Tests
 # ------------------------------------------------------------------------------
 
+
 def test_update_equipment_success_and_status_change(equipment_test_data):
     token = equipment_test_data["token_mgr_a"]
 
     # Step 1: Create Equipment
     create_res = client.post(
         "/api/v1/equipment",
-        json={"name": "Hot Holding Oven", "equipment_type": "OVEN", "min_temp": 60.0, "max_temp": 90.0},
+        json={
+            "name": "Hot Holding Oven",
+            "equipment_type": "OVEN",
+            "min_temp": 60.0,
+            "max_temp": 90.0,
+        },
         headers={"Authorization": f"Bearer {token}"},
     )
     eq_id = create_res.json()["data"]["id"]
@@ -239,7 +270,9 @@ def test_delete_equipment_success(equipment_test_data):
     )
     eq_id = create_res.json()["data"]["id"]
 
-    del_res = client.delete(f"/api/v1/equipment/{eq_id}", headers={"Authorization": f"Bearer {token}"})
+    del_res = client.delete(
+        f"/api/v1/equipment/{eq_id}", headers={"Authorization": f"Bearer {token}"}
+    )
     assert del_res.status_code == 200
     assert del_res.json()["success"] is True
 
@@ -251,6 +284,7 @@ def test_delete_equipment_success(equipment_test_data):
 # ------------------------------------------------------------------------------
 # 3. Tenant Isolation & Search Filtering Tests
 # ------------------------------------------------------------------------------
+
 
 def test_tenant_isolation_cross_tenant_equipment_access(equipment_test_data):
     token_mgr_a = equipment_test_data["token_mgr_a"]
@@ -264,7 +298,9 @@ def test_tenant_isolation_cross_tenant_equipment_access(equipment_test_data):
     eq_id = create_res.json()["data"]["id"]
 
     # Manager B attempts GET -> FORBIDDEN (403)
-    get_res = client.get(f"/api/v1/equipment/{eq_id}", headers={"Authorization": f"Bearer {token_mgr_b}"})
+    get_res = client.get(
+        f"/api/v1/equipment/{eq_id}", headers={"Authorization": f"Bearer {token_mgr_b}"}
+    )
     assert get_res.status_code == 403
     assert get_res.json()["error"]["code"] == "FORBIDDEN_CROSS_TENANT"
 
@@ -282,7 +318,11 @@ def test_list_equipment_filtering_and_search(equipment_test_data):
 
     client.post(
         "/api/v1/equipment",
-        json={"name": "Display Chiller Alpha", "equipment_type": "CHILLER", "status": "OPERATIONAL"},
+        json={
+            "name": "Display Chiller Alpha",
+            "equipment_type": "CHILLER",
+            "status": "OPERATIONAL",
+        },
         headers={"Authorization": f"Bearer {token}"},
     )
     client.post(
@@ -292,13 +332,17 @@ def test_list_equipment_filtering_and_search(equipment_test_data):
     )
 
     # Filter by equipment_type=FREEZER
-    res_freezer = client.get("/api/v1/equipment?equipment_type=FREEZER", headers={"Authorization": f"Bearer {token}"})
+    res_freezer = client.get(
+        "/api/v1/equipment?equipment_type=FREEZER", headers={"Authorization": f"Bearer {token}"}
+    )
     assert res_freezer.status_code == 200
     data_freezer = res_freezer.json()["data"]
     assert all(eq["equipment_type"] == "FREEZER" for eq in data_freezer)
 
     # Search by name "Alpha"
-    res_search = client.get("/api/v1/equipment?search=Alpha", headers={"Authorization": f"Bearer {token}"})
+    res_search = client.get(
+        "/api/v1/equipment?search=Alpha", headers={"Authorization": f"Bearer {token}"}
+    )
     assert res_search.status_code == 200
     data_search = res_search.json()["data"]
     assert len(data_search) == 1

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppException
 from app.core.tenant import TenantContext
-from app.models.notifications_and_audit import Notification, NotificationPreference, OutboxEvent
+from app.models.notifications_and_audit import OutboxEvent
 from app.modules.outbox import repository, schema
 
 logger = logging.getLogger(__name__)
@@ -146,7 +146,9 @@ def mark_user_notification_read(
     tenant_ctx: TenantContext,
     notification_id: uuid.UUID,
 ) -> schema.NotificationResponse:
-    n = repository.mark_notification_read(db=db, notification_id=notification_id, user_id=tenant_ctx.user_id)
+    n = repository.mark_notification_read(
+        db=db, notification_id=notification_id, user_id=tenant_ctx.user_id
+    )
     if not n:
         raise AppException(
             code="NOTIFICATION_NOT_FOUND",
@@ -165,7 +167,9 @@ def mark_all_user_notifications_read(db: Session, tenant_ctx: TenantContext) -> 
     )
 
 
-def get_user_preferences(db: Session, tenant_ctx: TenantContext) -> list[schema.NotificationPreferenceResponse]:
+def get_user_preferences(
+    db: Session, tenant_ctx: TenantContext
+) -> list[schema.NotificationPreferenceResponse]:
     prefs = repository.get_user_notification_preferences(db=db, user_id=tenant_ctx.user_id)
     return [schema.NotificationPreferenceResponse.model_validate(p) for p in prefs]
 

@@ -63,9 +63,13 @@ def test_setup_data(db_session: Session):
         status="ACTIVE",
     )
     # Clean any conflicting pre-existing test users in DB
-    existing_colliding_users = db_session.query(User).filter(
-        User.phone.in_(["9876543210", "9111111111"]) | (User.email == "admin@bharatfoodsafe.io")
-    ).all()
+    existing_colliding_users = (
+        db_session.query(User)
+        .filter(
+            User.phone.in_(["9876543210", "9111111111"]) | (User.email == "admin@bharatfoodsafe.io")
+        )
+        .all()
+    )
     for u in existing_colliding_users:
         db_session.query(AuthSession).filter_by(user_id=u.id).delete(synchronize_session=False)
         db_session.query(UserRole).filter_by(user_id=u.id).delete(synchronize_session=False)
@@ -149,6 +153,7 @@ def test_setup_data(db_session: Session):
 # 1. Unit Tests for Hashing and JWT
 # ------------------------------------------------------------------------------
 
+
 def test_password_and_pin_hashing():
     pw = "SecretPassword123"
     hashed_pw = hash_password(pw)
@@ -189,6 +194,7 @@ def test_jwt_token_generation_and_decoding():
 # ------------------------------------------------------------------------------
 # 2. Login Endpoint Tests (/api/v1/auth/login)
 # ------------------------------------------------------------------------------
+
 
 def test_login_staff_phone_pin_success(test_setup_data):
     response = client.post(
@@ -259,6 +265,7 @@ def test_login_rate_limiting():
 # 3. Token Refresh and Reuse Detection Tests (/api/v1/auth/refresh)
 # ------------------------------------------------------------------------------
 
+
 def test_refresh_token_success_and_rotation(test_setup_data, db_session: Session):
     login_res = client.post("/api/v1/auth/login", json={"phone": "9876543210", "pin": "1234"})
     refresh_token = login_res.json()["data"]["refresh_token"]
@@ -312,6 +319,7 @@ def test_refresh_token_reuse_detection(test_setup_data, db_session: Session):
 # ------------------------------------------------------------------------------
 # 4. Authenticated Endpoints & TenantContext Isolation Tests
 # ------------------------------------------------------------------------------
+
 
 def test_auth_me_endpoint(test_setup_data):
     login_res = client.post("/api/v1/auth/login", json={"phone": "9876543210", "pin": "1234"})

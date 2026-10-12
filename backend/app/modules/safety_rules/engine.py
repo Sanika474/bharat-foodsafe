@@ -1,9 +1,8 @@
 import logging
-import uuid
 from typing import Any
 from sqlalchemy.orm import Session
 
-from app.models.tasks_and_rules import Entry, RuleSource, SafetyRule, Task
+from app.models.tasks_and_rules import Entry, SafetyRule, Task
 from app.modules.safety_rules import repository
 from app.modules.safety_rules.schema import EvaluationDetail, RuleEvaluationResult
 
@@ -146,7 +145,8 @@ def evaluate_single_rule(
 
     # 2. Data Type Conversion Validation for Numeric Rules
     is_numeric_rule = any(
-        k in cond or k in str(cond) for k in ("gt", "gte", "lt", "lte", "min", "max", "value_numeric", "range")
+        k in cond or k in str(cond)
+        for k in ("gt", "gte", "lt", "lte", "min", "max", "value_numeric", "range")
     )
     if is_numeric_rule:
         try:

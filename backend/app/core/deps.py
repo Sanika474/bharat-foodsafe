@@ -1,5 +1,5 @@
 from typing import Generator
-from fastapi import Depends, Request
+from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
@@ -72,9 +72,7 @@ def get_current_user(
 
     # Fetch active roles for user
     user_roles_records = (
-        db.query(UserRole)
-        .filter(UserRole.user_id == user.id, UserRole.revoked_at.is_(None))
-        .all()
+        db.query(UserRole).filter(UserRole.user_id == user.id, UserRole.revoked_at.is_(None)).all()
     )
     roles = [ur.role.name for ur in user_roles_records if ur.role]
 
@@ -93,7 +91,9 @@ def get_tenant_context(
 
 
 def require_roles(*allowed_roles: str):
-    def role_checker(user_and_roles: tuple[User, list[str]] = Depends(get_current_user)) -> tuple[User, list[str]]:
+    def role_checker(
+        user_and_roles: tuple[User, list[str]] = Depends(get_current_user),
+    ) -> tuple[User, list[str]]:
         user, roles = user_and_roles
         if not any(r in roles for r in allowed_roles):
             raise AppException(

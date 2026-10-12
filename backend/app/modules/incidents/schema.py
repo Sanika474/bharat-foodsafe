@@ -42,21 +42,33 @@ class IncidentResponse(BaseModel):
 
 class AssignCAPARequest(BaseModel):
     assigned_to: uuid.UUID = Field(..., description="Staff user ID assigned to perform CAPA")
-    action_text: str | None = Field(default=None, description="Updated or additional corrective action instructions")
+    action_text: str | None = Field(
+        default=None, description="Updated or additional corrective action instructions"
+    )
 
 
 class CompleteCAPARequest(BaseModel):
-    value_numeric: float | None = Field(default=None, description="Re-check numeric measurement value")
+    value_numeric: float | None = Field(
+        default=None, description="Re-check numeric measurement value"
+    )
     value_text: str | None = Field(default=None, description="Re-check text observation")
     value_jsonb: Any | None = Field(default=None, description="Re-check JSON observation")
     unit: str | None = Field(default=None, description="Measurement unit (e.g. C, F)")
-    evidence_file_id: uuid.UUID | None = Field(default=None, description="Associated re-check evidence photo file ID")
-    notes: str | None = Field(default=None, description="Staff completion comments / corrective action summary")
+    evidence_file_id: uuid.UUID | None = Field(
+        default=None, description="Associated re-check evidence photo file ID"
+    )
+    notes: str | None = Field(
+        default=None, description="Staff completion comments / corrective action summary"
+    )
 
 
 class VerifyCAPARequest(BaseModel):
-    approved: bool = Field(..., description="True to verify and close incident, False to reopen CAPA")
-    notes: str | None = Field(default=None, description="Manager verification notes or reopening reason")
+    approved: bool = Field(
+        ..., description="True to verify and close incident, False to reopen CAPA"
+    )
+    notes: str | None = Field(
+        default=None, description="Manager verification notes or reopening reason"
+    )
 
 
 class DirectStatusPatchRequest(BaseModel):

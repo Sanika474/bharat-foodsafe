@@ -12,9 +12,13 @@ from app.models.tasks_and_rules import EvidenceFile
 client = TestClient(app)
 
 # Standard binary test fixtures
-VALID_JPEG_BYTES = b"\xFF\xD8\xFF\xE0\x00\x10JFIF\x00\x01\x01\x01\x00`\x00`\x00\x00\xFF\xDB\x00C\x00"
+VALID_JPEG_BYTES = (
+    b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00`\x00`\x00\x00\xff\xdb\x00C\x00"
+)
 VALID_PNG_BYTES = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4"
-VALID_WEBP_BYTES = b"RIFF\x1a\x00\x00\x00WEBPVP8 \x0e\x00\x00\x00\x30\x01\x00\x9d\x01\x2a\x01\x00\x01\x00"
+VALID_WEBP_BYTES = (
+    b"RIFF\x1a\x00\x00\x00WEBPVP8 \x0e\x00\x00\x00\x30\x01\x00\x9d\x01\x2a\x01\x00\x01\x00"
+)
 FAKE_EXE_BYTES = b"MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00\xff\xff\x00\x00"
 TEXT_SCRIPT_BYTES = b"#!/bin/bash\necho 'Hacked'\n"
 
@@ -90,8 +94,14 @@ def upload_test_data(db_session: Session):
     db_session.add(user_b)
     db_session.commit()
 
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=user_a.id, role_id=staff_role.id, restaurant_id=rest_a.id))
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=user_b.id, role_id=manager_role.id, restaurant_id=rest_b.id))
+    db_session.add(
+        UserRole(id=uuid.uuid4(), user_id=user_a.id, role_id=staff_role.id, restaurant_id=rest_a.id)
+    )
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=user_b.id, role_id=manager_role.id, restaurant_id=rest_b.id
+        )
+    )
     db_session.commit()
 
     token_a, _ = create_access_token(user_id=user_a.id, tenant_id=rest_a.id, roles=["STAFF"])
@@ -107,16 +117,25 @@ def upload_test_data(db_session: Session):
     }
 
     # Clean up test data
-    db_session.query(EvidenceFile).filter(EvidenceFile.restaurant_id.in_([rest_a.id, rest_b.id])).delete(synchronize_session=False)
-    db_session.query(UserRole).filter(UserRole.user_id.in_([user_a.id, user_b.id])).delete(synchronize_session=False)
-    db_session.query(User).filter(User.id.in_([user_a.id, user_b.id])).delete(synchronize_session=False)
-    db_session.query(Restaurant).filter(Restaurant.id.in_([rest_a.id, rest_b.id])).delete(synchronize_session=False)
+    db_session.query(EvidenceFile).filter(
+        EvidenceFile.restaurant_id.in_([rest_a.id, rest_b.id])
+    ).delete(synchronize_session=False)
+    db_session.query(UserRole).filter(UserRole.user_id.in_([user_a.id, user_b.id])).delete(
+        synchronize_session=False
+    )
+    db_session.query(User).filter(User.id.in_([user_a.id, user_b.id])).delete(
+        synchronize_session=False
+    )
+    db_session.query(Restaurant).filter(Restaurant.id.in_([rest_a.id, rest_b.id])).delete(
+        synchronize_session=False
+    )
     db_session.commit()
 
 
 # ------------------------------------------------------------------------------
 # 1. Presign Tests
 # ------------------------------------------------------------------------------
+
 
 def test_presign_upload_success(upload_test_data):
     token = upload_test_data["token_a"]
@@ -190,12 +209,18 @@ def test_presign_size_exceeded_rejected(upload_test_data):
 # 2. Binary Upload, Magic Bytes & SHA-256 Validation Tests
 # ------------------------------------------------------------------------------
 
-@pytest.mark.parametrize("mime_type, filename, binary_content", [
-    ("image/jpeg", "test.jpg", VALID_JPEG_BYTES),
-    ("image/png", "test.png", VALID_PNG_BYTES),
-    ("image/webp", "test.webp", VALID_WEBP_BYTES),
-])
-def test_valid_image_upload_and_confirmation_flow(upload_test_data, mime_type, filename, binary_content):
+
+@pytest.mark.parametrize(
+    "mime_type, filename, binary_content",
+    [
+        ("image/jpeg", "test.jpg", VALID_JPEG_BYTES),
+        ("image/png", "test.png", VALID_PNG_BYTES),
+        ("image/webp", "test.webp", VALID_WEBP_BYTES),
+    ],
+)
+def test_valid_image_upload_and_confirmation_flow(
+    upload_test_data, mime_type, filename, binary_content
+):
     token = upload_test_data["token_a"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -239,7 +264,11 @@ def test_invalid_magic_bytes_rejected_on_confirm(upload_test_data):
     # Presign claiming image/jpeg
     presign_res = client.post(
         "/api/v1/uploads/presign",
-        json={"filename": "fake_image.jpg", "mime_type": "image/jpeg", "size_bytes": len(TEXT_SCRIPT_BYTES)},
+        json={
+            "filename": "fake_image.jpg",
+            "mime_type": "image/jpeg",
+            "size_bytes": len(TEXT_SCRIPT_BYTES),
+        },
         headers=headers,
     )
     evidence_id = presign_res.json()["data"]["id"]
@@ -286,7 +315,11 @@ def test_confirm_idempotent_on_completed_file(upload_test_data):
 
     presign_res = client.post(
         "/api/v1/uploads/presign",
-        json={"filename": "photo.png", "mime_type": "image/png", "size_bytes": len(VALID_PNG_BYTES)},
+        json={
+            "filename": "photo.png",
+            "mime_type": "image/png",
+            "size_bytes": len(VALID_PNG_BYTES),
+        },
         headers=headers,
     )
     evidence_id = presign_res.json()["data"]["id"]
@@ -309,6 +342,7 @@ def test_confirm_idempotent_on_completed_file(upload_test_data):
 # 3. Tenant Isolation & Authorization Tests
 # ------------------------------------------------------------------------------
 
+
 def test_tenant_isolation_cross_tenant_access_denied(upload_test_data):
     token_a = upload_test_data["token_a"]
     token_b = upload_test_data["token_b"]
@@ -316,7 +350,11 @@ def test_tenant_isolation_cross_tenant_access_denied(upload_test_data):
     # User A (Restaurant A) creates presign & confirms upload
     presign_res = client.post(
         "/api/v1/uploads/presign",
-        json={"filename": "private.jpg", "mime_type": "image/jpeg", "size_bytes": len(VALID_JPEG_BYTES)},
+        json={
+            "filename": "private.jpg",
+            "mime_type": "image/jpeg",
+            "size_bytes": len(VALID_JPEG_BYTES),
+        },
         headers={"Authorization": f"Bearer {token_a}"},
     )
     evidence_id = presign_res.json()["data"]["id"]
@@ -345,7 +383,11 @@ def test_download_completed_evidence_file(upload_test_data):
 
     presign_res = client.post(
         "/api/v1/uploads/presign",
-        json={"filename": "preview.png", "mime_type": "image/png", "size_bytes": len(VALID_PNG_BYTES)},
+        json={
+            "filename": "preview.png",
+            "mime_type": "image/png",
+            "size_bytes": len(VALID_PNG_BYTES),
+        },
         headers=headers,
     )
     evidence_id = presign_res.json()["data"]["id"]

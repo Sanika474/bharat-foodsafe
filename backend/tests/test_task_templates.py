@@ -71,7 +71,11 @@ def template_test_data(db_session: Session):
         status="ACTIVE",
     )
     db_session.add(manager_a)
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=manager_a.id, role_id=manager_role.id, restaurant_id=rest_a.id))
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=manager_a.id, role_id=manager_role.id, restaurant_id=rest_a.id
+        )
+    )
 
     # Create Staff User for Restaurant A
     staff_a = User(
@@ -82,7 +86,11 @@ def template_test_data(db_session: Session):
         status="ACTIVE",
     )
     db_session.add(staff_a)
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=staff_a.id, role_id=staff_role.id, restaurant_id=rest_a.id))
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=staff_a.id, role_id=staff_role.id, restaurant_id=rest_a.id
+        )
+    )
 
     # Create Manager User for Restaurant B
     manager_b = User(
@@ -93,7 +101,11 @@ def template_test_data(db_session: Session):
         status="ACTIVE",
     )
     db_session.add(manager_b)
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=manager_b.id, role_id=manager_role.id, restaurant_id=rest_b.id))
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=manager_b.id, role_id=manager_role.id, restaurant_id=rest_b.id
+        )
+    )
 
     # Create Task Category
     category = TaskCategory(
@@ -108,9 +120,13 @@ def template_test_data(db_session: Session):
     db_session.commit()
 
     # Generate Access Tokens
-    token_mgr_a, _ = create_access_token(user_id=manager_a.id, tenant_id=rest_a.id, roles=["MANAGER"])
+    token_mgr_a, _ = create_access_token(
+        user_id=manager_a.id, tenant_id=rest_a.id, roles=["MANAGER"]
+    )
     token_staff_a, _ = create_access_token(user_id=staff_a.id, tenant_id=rest_a.id, roles=["STAFF"])
-    token_mgr_b, _ = create_access_token(user_id=manager_b.id, tenant_id=rest_b.id, roles=["MANAGER"])
+    token_mgr_b, _ = create_access_token(
+        user_id=manager_b.id, tenant_id=rest_b.id, roles=["MANAGER"]
+    )
 
     yield {
         "rest_a": rest_a,
@@ -126,6 +142,7 @@ def template_test_data(db_session: Session):
 
     # Clean up test data
     from app.models.tasks_and_rules import Task
+
     db_session.query(Task).delete()
     db_session.query(TaskTemplateVersion).delete()
     db_session.query(TaskTemplate).delete()
@@ -133,18 +150,19 @@ def template_test_data(db_session: Session):
     db_session.query(UserRole).filter(
         UserRole.user_id.in_([manager_a.id, staff_a.id, manager_b.id])
     ).delete(synchronize_session=False)
-    db_session.query(User).filter(
-        User.id.in_([manager_a.id, staff_a.id, manager_b.id])
-    ).delete(synchronize_session=False)
-    db_session.query(Restaurant).filter(
-        Restaurant.id.in_([rest_a.id, rest_b.id])
-    ).delete(synchronize_session=False)
+    db_session.query(User).filter(User.id.in_([manager_a.id, staff_a.id, manager_b.id])).delete(
+        synchronize_session=False
+    )
+    db_session.query(Restaurant).filter(Restaurant.id.in_([rest_a.id, rest_b.id])).delete(
+        synchronize_session=False
+    )
     db_session.commit()
 
 
 # ------------------------------------------------------------------------------
 # 1. Template Creation & Initial Version Tests
 # ------------------------------------------------------------------------------
+
 
 def test_create_task_template_success(template_test_data):
     token = template_test_data["token_mgr_a"]
@@ -191,11 +209,15 @@ def test_create_template_duplicate_code_conflict(template_test_data):
         "configuration_jsonb": {"min_val": -22, "max_val": -18},
     }
 
-    res1 = client.post("/api/v1/task-templates", json=payload, headers={"Authorization": f"Bearer {token}"})
+    res1 = client.post(
+        "/api/v1/task-templates", json=payload, headers={"Authorization": f"Bearer {token}"}
+    )
     assert res1.status_code == 201
 
     # Duplicate code attempt for same outlet
-    res2 = client.post("/api/v1/task-templates", json=payload, headers={"Authorization": f"Bearer {token}"})
+    res2 = client.post(
+        "/api/v1/task-templates", json=payload, headers={"Authorization": f"Bearer {token}"}
+    )
     assert res2.status_code == 409
     assert res2.json()["error"]["code"] == "DUPLICATE_TEMPLATE_CODE"
 
@@ -211,7 +233,9 @@ def test_create_template_staff_forbidden(template_test_data):
         "configuration_jsonb": {"min_val": 0},
     }
 
-    res = client.post("/api/v1/task-templates", json=payload, headers={"Authorization": f"Bearer {token}"})
+    res = client.post(
+        "/api/v1/task-templates", json=payload, headers={"Authorization": f"Bearer {token}"}
+    )
     assert res.status_code == 403
     assert res.json()["error"]["code"] == "INSUFFICIENT_PERMISSIONS"
 
@@ -219,6 +243,7 @@ def test_create_template_staff_forbidden(template_test_data):
 # ------------------------------------------------------------------------------
 # 2. Immutable Versioning & Update Tests
 # ------------------------------------------------------------------------------
+
 
 def test_immutable_version_increment_on_update(template_test_data, db_session: Session):
     token = template_test_data["token_mgr_a"]
@@ -231,13 +256,17 @@ def test_immutable_version_increment_on_update(template_test_data, db_session: S
         "code": "HYGIENE_CHECK",
         "configuration_jsonb": {"items": ["Sanitize Tables", "Clean Prep Surface"]},
     }
-    create_res = client.post("/api/v1/task-templates", json=create_payload, headers={"Authorization": f"Bearer {token}"})
+    create_res = client.post(
+        "/api/v1/task-templates", json=create_payload, headers={"Authorization": f"Bearer {token}"}
+    )
     assert create_res.status_code == 201
     template_id = create_res.json()["data"]["id"]
 
     # Step 2: Update configuration (Triggers Version 2 creation)
     update_payload = {
-        "configuration_jsonb": {"items": ["Sanitize Tables", "Clean Prep Surface", "Check Handwash Station"]},
+        "configuration_jsonb": {
+            "items": ["Sanitize Tables", "Clean Prep Surface", "Check Handwash Station"]
+        },
     }
     update_res = client.put(
         f"/api/v1/task-templates/{template_id}",
@@ -280,7 +309,9 @@ def test_explicit_create_version_endpoint(template_test_data):
         "code": "OIL_TEST",
         "configuration_jsonb": {"max_tpm": 25},
     }
-    create_res = client.post("/api/v1/task-templates", json=create_payload, headers={"Authorization": f"Bearer {token}"})
+    create_res = client.post(
+        "/api/v1/task-templates", json=create_payload, headers={"Authorization": f"Bearer {token}"}
+    )
     template_id = create_res.json()["data"]["id"]
 
     # Call explicit POST /versions endpoint
@@ -298,6 +329,7 @@ def test_explicit_create_version_endpoint(template_test_data):
 # ------------------------------------------------------------------------------
 # 3. Tenant Isolation & Retrieval Tests
 # ------------------------------------------------------------------------------
+
 
 def test_tenant_isolation_cross_tenant_access_denied(template_test_data):
     token_mgr_a = template_test_data["token_mgr_a"]
@@ -349,7 +381,9 @@ def test_list_templates_returns_tenant_scoped_records(template_test_data):
         headers={"Authorization": f"Bearer {token_mgr_a}"},
     )
 
-    list_res = client.get("/api/v1/task-templates", headers={"Authorization": f"Bearer {token_mgr_a}"})
+    list_res = client.get(
+        "/api/v1/task-templates", headers={"Authorization": f"Bearer {token_mgr_a}"}
+    )
     assert list_res.status_code == 200
     body = list_res.json()
 

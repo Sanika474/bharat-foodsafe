@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Sequence
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, joinedload
@@ -110,8 +110,14 @@ def list_corrective_actions(
     skip: int = 0,
     limit: int = 50,
 ) -> tuple[Sequence[CorrectiveAction], int]:
-    stmt = select(CorrectiveAction).join(Incident, CorrectiveAction.incident_id == Incident.id).options(joinedload(CorrectiveAction.incident))
-    count_stmt = select(func.count(CorrectiveAction.id)).join(Incident, CorrectiveAction.incident_id == Incident.id)
+    stmt = (
+        select(CorrectiveAction)
+        .join(Incident, CorrectiveAction.incident_id == Incident.id)
+        .options(joinedload(CorrectiveAction.incident))
+    )
+    count_stmt = select(func.count(CorrectiveAction.id)).join(
+        Incident, CorrectiveAction.incident_id == Incident.id
+    )
 
     filters = []
     if restaurant_id:

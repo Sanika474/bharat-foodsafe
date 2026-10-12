@@ -2,7 +2,7 @@ import uuid
 from sqlalchemy.orm import Session
 from app.core.exceptions import AppException
 from app.core.tenant import TenantContext
-from app.models.tasks_and_rules import TaskTemplate, TaskTemplateVersion
+from app.models.tasks_and_rules import TaskTemplate
 from app.modules.task_templates import repository
 from app.modules.task_templates.schema import (
     TaskTemplateCreate,

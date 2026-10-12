@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, timezone
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -82,8 +82,16 @@ def scheduler_test_data(db_session: Session):
     db_session.add(staff_a)
     db_session.commit()
 
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=mgr_a.id, role_id=manager_role.id, restaurant_id=rest_a.id))
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=staff_a.id, role_id=staff_role.id, restaurant_id=rest_a.id))
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=mgr_a.id, role_id=manager_role.id, restaurant_id=rest_a.id
+        )
+    )
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=staff_a.id, role_id=staff_role.id, restaurant_id=rest_a.id
+        )
+    )
     db_session.commit()
 
     category = TaskCategory(
@@ -114,9 +122,15 @@ def scheduler_test_data(db_session: Session):
     db_session.query(TaskTemplateVersion).delete()
     db_session.query(TaskTemplate).delete()
     db_session.query(TaskCategory).filter_by(id=category.id).delete()
-    db_session.query(UserRole).filter(UserRole.user_id.in_([mgr_a.id, staff_a.id])).delete(synchronize_session=False)
-    db_session.query(User).filter(User.id.in_([mgr_a.id, staff_a.id])).delete(synchronize_session=False)
-    db_session.query(Restaurant).filter(Restaurant.id.in_([rest_a.id, rest_b.id])).delete(synchronize_session=False)
+    db_session.query(UserRole).filter(UserRole.user_id.in_([mgr_a.id, staff_a.id])).delete(
+        synchronize_session=False
+    )
+    db_session.query(User).filter(User.id.in_([mgr_a.id, staff_a.id])).delete(
+        synchronize_session=False
+    )
+    db_session.query(Restaurant).filter(Restaurant.id.in_([rest_a.id, rest_b.id])).delete(
+        synchronize_session=False
+    )
     db_session.commit()
 
 

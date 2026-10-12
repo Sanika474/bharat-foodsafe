@@ -96,25 +96,53 @@ def anomaly_test_data(db_session: Session):
     db_session.add_all([staff_a1, manager_a, staff_b1])
     db_session.commit()
 
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=staff_a1.id, role_id=staff_role.id, restaurant_id=rest_a.id))
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=manager_a.id, role_id=manager_role.id, restaurant_id=rest_a.id))
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=staff_b1.id, role_id=staff_role.id, restaurant_id=rest_b.id))
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=staff_a1.id, role_id=staff_role.id, restaurant_id=rest_a.id
+        )
+    )
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=manager_a.id, role_id=manager_role.id, restaurant_id=rest_a.id
+        )
+    )
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=staff_b1.id, role_id=staff_role.id, restaurant_id=rest_b.id
+        )
+    )
     db_session.commit()
 
-    token_staff_a1, _ = create_access_token(user_id=staff_a1.id, tenant_id=rest_a.id, roles=["STAFF"])
-    token_manager_a, _ = create_access_token(user_id=manager_a.id, tenant_id=rest_a.id, roles=["MANAGER"])
-    token_staff_b1, _ = create_access_token(user_id=staff_b1.id, tenant_id=rest_b.id, roles=["STAFF"])
+    token_staff_a1, _ = create_access_token(
+        user_id=staff_a1.id, tenant_id=rest_a.id, roles=["STAFF"]
+    )
+    token_manager_a, _ = create_access_token(
+        user_id=manager_a.id, tenant_id=rest_a.id, roles=["MANAGER"]
+    )
+    token_staff_b1, _ = create_access_token(
+        user_id=staff_b1.id, tenant_id=rest_b.id, roles=["STAFF"]
+    )
 
     # Task Template & Version
-    cat = TaskCategory(id=uuid.uuid4(), restaurant_id=rest_a.id, name="General", code=f"GEN_{uuid.uuid4().hex[:4]}")
+    cat = TaskCategory(
+        id=uuid.uuid4(), restaurant_id=rest_a.id, name="General", code=f"GEN_{uuid.uuid4().hex[:4]}"
+    )
     db_session.add(cat)
     db_session.commit()
 
-    tmpl = TaskTemplate(id=uuid.uuid4(), restaurant_id=rest_a.id, category_id=cat.id, name="Chiller Log", code=f"LOG_{uuid.uuid4().hex[:4]}")
+    tmpl = TaskTemplate(
+        id=uuid.uuid4(),
+        restaurant_id=rest_a.id,
+        category_id=cat.id,
+        name="Chiller Log",
+        code=f"LOG_{uuid.uuid4().hex[:4]}",
+    )
     db_session.add(tmpl)
     db_session.commit()
 
-    tmpl_v = TaskTemplateVersion(id=uuid.uuid4(), template_id=tmpl.id, version_number=1, configuration_jsonb={})
+    tmpl_v = TaskTemplateVersion(
+        id=uuid.uuid4(), template_id=tmpl.id, version_number=1, configuration_jsonb={}
+    )
     db_session.add(tmpl_v)
     db_session.commit()
 
@@ -172,7 +200,9 @@ def anomaly_test_data(db_session: Session):
 
 
 # Helper to seed dummy entry history
-def seed_entry_history(db: Session, restaurant_id: uuid.UUID, user_id: uuid.UUID, task_id: uuid.UUID, count: int = 35):
+def seed_entry_history(
+    db: Session, restaurant_id: uuid.UUID, user_id: uuid.UUID, task_id: uuid.UUID, count: int = 35
+):
     now = datetime.now(timezone.utc)
     entries = []
     for i in range(count):
@@ -200,6 +230,7 @@ def seed_entry_history(db: Session, restaurant_id: uuid.UUID, user_id: uuid.UUID
 # ------------------------------------------------------------------------------
 # 1. Cold-Start Policy (< 30 entries)
 # ------------------------------------------------------------------------------
+
 
 def test_cold_start_policy_returns_unavailable(anomaly_test_data, db_session: Session):
     rest_id = anomaly_test_data["rest_a"].id
@@ -234,6 +265,7 @@ def test_cold_start_policy_returns_unavailable(anomaly_test_data, db_session: Se
 # 2. Normal Shift (No False Positive)
 # ------------------------------------------------------------------------------
 
+
 def test_normal_operating_shift_returns_no_flag(anomaly_test_data, db_session: Session):
     rest_id = anomaly_test_data["rest_a"].id
     user_id = anomaly_test_data["staff_a1"].id
@@ -267,6 +299,7 @@ def test_normal_operating_shift_returns_no_flag(anomaly_test_data, db_session: S
 # ------------------------------------------------------------------------------
 # 3. Anomaly Conditions (Burst, Photo Reuse, Flatlining)
 # ------------------------------------------------------------------------------
+
 
 def test_rapid_burst_submission_flagged(anomaly_test_data, db_session: Session):
     rest_id = anomaly_test_data["rest_a"].id
@@ -315,8 +348,26 @@ def test_photo_evidence_reuse_flagged(anomaly_test_data, db_session: Session):
     seed_entry_history(db_session, rest_id, user_id, task_id, count=35)
 
     # 2 entries with exact same evidence_file_id
-    e1 = Entry(id=uuid.uuid4(), restaurant_id=rest_id, task_id=task_id, user_id=user_id, evidence_file_id=ev_id, value_numeric=3.0, unit="C", safety_status="NORMAL")
-    e2 = Entry(id=uuid.uuid4(), restaurant_id=rest_id, task_id=task_id, user_id=user_id, evidence_file_id=ev_id, value_numeric=3.1, unit="C", safety_status="NORMAL")
+    e1 = Entry(
+        id=uuid.uuid4(),
+        restaurant_id=rest_id,
+        task_id=task_id,
+        user_id=user_id,
+        evidence_file_id=ev_id,
+        value_numeric=3.0,
+        unit="C",
+        safety_status="NORMAL",
+    )
+    e2 = Entry(
+        id=uuid.uuid4(),
+        restaurant_id=rest_id,
+        task_id=task_id,
+        user_id=user_id,
+        evidence_file_id=ev_id,
+        value_numeric=3.1,
+        unit="C",
+        safety_status="NORMAL",
+    )
     db_session.add_all([e1, e2])
     db_session.commit()
 
@@ -332,6 +383,7 @@ def test_photo_evidence_reuse_flagged(anomaly_test_data, db_session: Session):
 # 4. Duplicate Prevention & Deterministic Re-run
 # ------------------------------------------------------------------------------
 
+
 def test_duplicate_anomaly_evaluation_prevented(anomaly_test_data, db_session: Session):
     rest_id = anomaly_test_data["rest_a"].id
     user_id = anomaly_test_data["staff_a1"].id
@@ -339,7 +391,15 @@ def test_duplicate_anomaly_evaluation_prevented(anomaly_test_data, db_session: S
 
     seed_entry_history(db_session, rest_id, user_id, task_id, count=35)
 
-    entry = Entry(id=uuid.uuid4(), restaurant_id=rest_id, task_id=task_id, user_id=user_id, value_numeric=3.0, unit="C", safety_status="NORMAL")
+    entry = Entry(
+        id=uuid.uuid4(),
+        restaurant_id=rest_id,
+        task_id=task_id,
+        user_id=user_id,
+        value_numeric=3.0,
+        unit="C",
+        safety_status="NORMAL",
+    )
     db_session.add(entry)
     db_session.commit()
 
@@ -359,6 +419,7 @@ def test_duplicate_anomaly_evaluation_prevented(anomaly_test_data, db_session: S
 # 5. API Authorization & Endpoints
 # ------------------------------------------------------------------------------
 
+
 def test_api_list_anomalies_manager_allowed(anomaly_test_data, db_session: Session):
     rest_id = anomaly_test_data["rest_a"].id
     user_id = anomaly_test_data["staff_a1"].id
@@ -366,7 +427,15 @@ def test_api_list_anomalies_manager_allowed(anomaly_test_data, db_session: Sessi
 
     seed_entry_history(db_session, rest_id, user_id, task_id, count=35)
 
-    entry = Entry(id=uuid.uuid4(), restaurant_id=rest_id, task_id=task_id, user_id=user_id, value_numeric=3.0, unit="C", safety_status="NORMAL")
+    entry = Entry(
+        id=uuid.uuid4(),
+        restaurant_id=rest_id,
+        task_id=task_id,
+        user_id=user_id,
+        value_numeric=3.0,
+        unit="C",
+        safety_status="NORMAL",
+    )
     db_session.add(entry)
     db_session.commit()
 
@@ -399,7 +468,15 @@ def test_api_analyze_entry_endpoint(anomaly_test_data, db_session: Session):
 
     seed_entry_history(db_session, rest_id, user_id, task_id, count=35)
 
-    entry = Entry(id=uuid.uuid4(), restaurant_id=rest_id, task_id=task_id, user_id=user_id, value_numeric=3.0, unit="C", safety_status="NORMAL")
+    entry = Entry(
+        id=uuid.uuid4(),
+        restaurant_id=rest_id,
+        task_id=task_id,
+        user_id=user_id,
+        value_numeric=3.0,
+        unit="C",
+        safety_status="NORMAL",
+    )
     db_session.add(entry)
     db_session.commit()
 
@@ -420,7 +497,15 @@ def test_cross_tenant_anomaly_access_forbidden(anomaly_test_data, db_session: Se
 
     seed_entry_history(db_session, rest_a_id, user_id, task_id, count=35)
 
-    entry = Entry(id=uuid.uuid4(), restaurant_id=rest_a_id, task_id=task_id, user_id=user_id, value_numeric=3.0, unit="C", safety_status="NORMAL")
+    entry = Entry(
+        id=uuid.uuid4(),
+        restaurant_id=rest_a_id,
+        task_id=task_id,
+        user_id=user_id,
+        value_numeric=3.0,
+        unit="C",
+        safety_status="NORMAL",
+    )
     db_session.add(entry)
     db_session.commit()
 

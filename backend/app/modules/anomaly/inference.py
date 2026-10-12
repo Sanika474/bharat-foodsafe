@@ -1,38 +1,46 @@
 import numpy as np
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.tasks_and_rules import Entry, Task
 
 
-def extract_features_for_entry(db: Session, entry: Entry) -> tuple[dict[str, float], list[str], int]:
+def extract_features_for_entry(
+    db: Session, entry: Entry
+) -> tuple[dict[str, float], list[str], int]:
     """
     Extracts statistical features for an entry and counts total restaurant entry history for cold-start check.
     Returns (features_dict, reason_flags_list, history_count).
     """
     # 1. Total entry history for restaurant
-    history_count = db.scalar(
-        select(func.count(Entry.id)).where(Entry.restaurant_id == entry.restaurant_id)
-    ) or 0
+    history_count = (
+        db.scalar(select(func.count(Entry.id)).where(Entry.restaurant_id == entry.restaurant_id))
+        or 0
+    )
 
     reasons = []
 
     # 2. Burst Score (Entries in past 60 seconds)
     window_start = entry.created_at - timedelta(seconds=60)
-    recent_burst_count = db.scalar(
-        select(func.count(Entry.id)).where(
-            Entry.restaurant_id == entry.restaurant_id,
-            Entry.user_id == entry.user_id,
-            Entry.created_at >= window_start,
-            Entry.created_at <= entry.created_at,
+    recent_burst_count = (
+        db.scalar(
+            select(func.count(Entry.id)).where(
+                Entry.restaurant_id == entry.restaurant_id,
+                Entry.user_id == entry.user_id,
+                Entry.created_at >= window_start,
+                Entry.created_at <= entry.created_at,
+            )
         )
-    ) or 1
+        or 1
+    )
 
     # Burst score normalized: >= 5 entries in 60s -> 1.0
     burst_score = min(1.0, (recent_burst_count - 1) / 4.0)
     if recent_burst_count >= 5:
-        reasons.append(f"Rapid burst submission: {recent_burst_count} entries submitted within 60 seconds.")
+        reasons.append(
+            f"Rapid burst submission: {recent_burst_count} entries submitted within 60 seconds."
+        )
 
     # 3. Timing Regularity (Standard deviation of inter-submission intervals)
     recent_entries = db.scalars(
@@ -54,7 +62,9 @@ def extract_features_for_entry(db: Session, entry: Entry) -> tuple[dict[str, flo
         # Robotic timing if std_dev < 0.2 seconds between submissions
         if std_dev < 0.2:
             timing_regularity = 0.0
-            reasons.append(f"Robotic submission interval: timestamps spaced identically (std dev = {std_dev:.3f}s).")
+            reasons.append(
+                f"Robotic submission interval: timestamps spaced identically (std dev = {std_dev:.3f}s)."
+            )
         else:
             timing_regularity = min(1.0, std_dev / 10.0)
 
@@ -80,21 +90,28 @@ def extract_features_for_entry(db: Session, entry: Entry) -> tuple[dict[str, flo
             var = float(np.var(vals))
             value_variance = var
             if var == 0.0:
-                reasons.append(f"Zero value variance: {len(vals)} consecutive readings reported identical value ({vals[0]}).")
+                reasons.append(
+                    f"Zero value variance: {len(vals)} consecutive readings reported identical value ({vals[0]})."
+                )
 
     # 5. Photo Reuse Count
     photo_reuse_count = 0
     if entry.evidence_file_id:
-        reuse_count = db.scalar(
-            select(func.count(Entry.id)).where(
-                Entry.restaurant_id == entry.restaurant_id,
-                Entry.evidence_file_id == entry.evidence_file_id,
-                Entry.id != entry.id,
+        reuse_count = (
+            db.scalar(
+                select(func.count(Entry.id)).where(
+                    Entry.restaurant_id == entry.restaurant_id,
+                    Entry.evidence_file_id == entry.evidence_file_id,
+                    Entry.id != entry.id,
+                )
             )
-        ) or 0
+            or 0
+        )
         photo_reuse_count = reuse_count
         if reuse_count >= 1:
-            reasons.append(f"Photo evidence reuse detected: exact image associated with {reuse_count} other entry/entries.")
+            reasons.append(
+                f"Photo evidence reuse detected: exact image associated with {reuse_count} other entry/entries."
+            )
 
     features = {
         "burst_score": float(burst_score),
@@ -154,28 +171,44 @@ def run_anomaly_inference(db: Session, entry: Entry) -> dict:
     # Use IsolationForest from scikit-learn for ML verification
     try:
         from sklearn.ensemble import IsolationForest
-        X_sample = np.array([
-            [features["burst_score"], features["timing_regularity"], features["value_variance"], features["photo_reuse_count"]]
-        ])
+
+        X_sample = np.array(
+            [
+                [
+                    features["burst_score"],
+                    features["timing_regularity"],
+                    features["value_variance"],
+                    features["photo_reuse_count"],
+                ]
+            ]
+        )
         # Simple fitted isolation forest baseline reference
         clf = IsolationForest(n_estimators=20, contamination=0.1, random_state=42)
         # Dummy background data + target sample
-        bg_data = np.array([
-            [0.0, 0.8, 1.5, 0.0],
-            [0.1, 0.9, 2.0, 0.0],
-            [0.0, 0.7, 1.2, 0.0],
-            [0.2, 1.0, 1.8, 0.0],
-            [X_sample[0][0], X_sample[0][1], X_sample[0][2], X_sample[0][3]]
-        ])
+        bg_data = np.array(
+            [
+                [0.0, 0.8, 1.5, 0.0],
+                [0.1, 0.9, 2.0, 0.0],
+                [0.0, 0.7, 1.2, 0.0],
+                [0.2, 1.0, 1.8, 0.0],
+                [X_sample[0][0], X_sample[0][1], X_sample[0][2], X_sample[0][3]],
+            ]
+        )
         clf.fit(bg_data)
         if_raw_score = -float(clf.score_samples(X_sample)[0])
         # Blend IF score with feature risk score
-        combined_ml_score = float(np.round(0.6 * risk_score + 0.4 * min(1.0, max(0.0, if_raw_score)), 4))
+        combined_ml_score = float(
+            np.round(0.6 * risk_score + 0.4 * min(1.0, max(0.0, if_raw_score)), 4)
+        )
     except Exception:
         combined_ml_score = float(np.round(risk_score, 4))
 
     # Decision threshold mapping
-    if combined_ml_score >= 0.65 or features["burst_score"] >= 0.8 or features["photo_reuse_count"] >= 2:
+    if (
+        combined_ml_score >= 0.65
+        or features["burst_score"] >= 0.8
+        or features["photo_reuse_count"] >= 2
+    ):
         decision = "SUSPICIOUS"
     elif combined_ml_score >= 0.35 or features["value_variance"] == 0.0:
         decision = "REVIEW"

@@ -1,4 +1,3 @@
-import uuid
 from datetime import timezone
 from sqlalchemy.orm import Session
 from app.core.config import settings
@@ -35,7 +34,11 @@ def login_user(db: Session, req: LoginRequest, client_ip: str = "127.0.0.1") -> 
             )
     elif req.email and req.password:
         user = repository.get_user_by_email(db, req.email)
-        if not user or not user.password_hash or not verify_password(req.password, user.password_hash):
+        if (
+            not user
+            or not user.password_hash
+            or not verify_password(req.password, user.password_hash)
+        ):
             raise AppException(
                 code="INVALID_CREDENTIALS",
                 message="Invalid email address or password.",

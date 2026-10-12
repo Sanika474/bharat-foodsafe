@@ -93,14 +93,32 @@ def audit_test_data(db_session: Session):
     db_session.add_all([staff_a1, manager_a, staff_b1])
     db_session.commit()
 
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=staff_a1.id, role_id=staff_role.id, restaurant_id=rest_a.id))
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=manager_a.id, role_id=manager_role.id, restaurant_id=rest_a.id))
-    db_session.add(UserRole(id=uuid.uuid4(), user_id=staff_b1.id, role_id=staff_role.id, restaurant_id=rest_b.id))
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=staff_a1.id, role_id=staff_role.id, restaurant_id=rest_a.id
+        )
+    )
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=manager_a.id, role_id=manager_role.id, restaurant_id=rest_a.id
+        )
+    )
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=staff_b1.id, role_id=staff_role.id, restaurant_id=rest_b.id
+        )
+    )
     db_session.commit()
 
-    token_staff_a1, _ = create_access_token(user_id=staff_a1.id, tenant_id=rest_a.id, roles=["STAFF"])
-    token_manager_a, _ = create_access_token(user_id=manager_a.id, tenant_id=rest_a.id, roles=["MANAGER"])
-    token_staff_b1, _ = create_access_token(user_id=staff_b1.id, tenant_id=rest_b.id, roles=["STAFF"])
+    token_staff_a1, _ = create_access_token(
+        user_id=staff_a1.id, tenant_id=rest_a.id, roles=["STAFF"]
+    )
+    token_manager_a, _ = create_access_token(
+        user_id=manager_a.id, tenant_id=rest_a.id, roles=["MANAGER"]
+    )
+    token_staff_b1, _ = create_access_token(
+        user_id=staff_b1.id, tenant_id=rest_b.id, roles=["STAFF"]
+    )
 
     yield {
         "rest_a": rest_a,
@@ -124,6 +142,7 @@ def audit_test_data(db_session: Session):
 # ------------------------------------------------------------------------------
 # 1. Genesis / First Record & Hash Chaining
 # ------------------------------------------------------------------------------
+
 
 def test_first_genesis_audit_record(audit_test_data, db_session: Session):
     rest_id = audit_test_data["rest_a"].id
@@ -153,11 +172,41 @@ def test_sequential_hash_chaining(audit_test_data, db_session: Session):
     user_id = audit_test_data["staff_a1"].id
 
     # Create 5 sequential audit events
-    rec1 = record_audit_event(db=db_session, event_name="EVENT_1", resource_type="type1", restaurant_id=rest_id, user_id=user_id)
-    rec2 = record_audit_event(db=db_session, event_name="EVENT_2", resource_type="type2", restaurant_id=rest_id, user_id=user_id)
-    rec3 = record_audit_event(db=db_session, event_name="EVENT_3", resource_type="type3", restaurant_id=rest_id, user_id=user_id)
-    rec4 = record_audit_event(db=db_session, event_name="EVENT_4", resource_type="type4", restaurant_id=rest_id, user_id=user_id)
-    rec5 = record_audit_event(db=db_session, event_name="EVENT_5", resource_type="type5", restaurant_id=rest_id, user_id=user_id)
+    rec1 = record_audit_event(
+        db=db_session,
+        event_name="EVENT_1",
+        resource_type="type1",
+        restaurant_id=rest_id,
+        user_id=user_id,
+    )
+    rec2 = record_audit_event(
+        db=db_session,
+        event_name="EVENT_2",
+        resource_type="type2",
+        restaurant_id=rest_id,
+        user_id=user_id,
+    )
+    rec3 = record_audit_event(
+        db=db_session,
+        event_name="EVENT_3",
+        resource_type="type3",
+        restaurant_id=rest_id,
+        user_id=user_id,
+    )
+    rec4 = record_audit_event(
+        db=db_session,
+        event_name="EVENT_4",
+        resource_type="type4",
+        restaurant_id=rest_id,
+        user_id=user_id,
+    )
+    rec5 = record_audit_event(
+        db=db_session,
+        event_name="EVENT_5",
+        resource_type="type5",
+        restaurant_id=rest_id,
+        user_id=user_id,
+    )
     db_session.commit()
 
     assert rec1.previous_hash == GENESIS_PREVIOUS_HASH
@@ -176,6 +225,7 @@ def test_sequential_hash_chaining(audit_test_data, db_session: Session):
 # ------------------------------------------------------------------------------
 # 2. Deterministic Canonical Serialization
 # ------------------------------------------------------------------------------
+
 
 def test_deterministic_canonical_hash():
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -208,13 +258,20 @@ def test_deterministic_canonical_hash():
 # 3. Tenant Isolation
 # ------------------------------------------------------------------------------
 
+
 def test_tenant_isolated_audit_chains(audit_test_data, db_session: Session):
     rest_a_id = audit_test_data["rest_a"].id
     rest_b_id = audit_test_data["rest_b"].id
 
-    rec_a1 = record_audit_event(db=db_session, event_name="EVENT_A1", resource_type="entry", restaurant_id=rest_a_id)
-    rec_b1 = record_audit_event(db=db_session, event_name="EVENT_B1", resource_type="entry", restaurant_id=rest_b_id)
-    rec_a2 = record_audit_event(db=db_session, event_name="EVENT_A2", resource_type="entry", restaurant_id=rest_a_id)
+    rec_a1 = record_audit_event(
+        db=db_session, event_name="EVENT_A1", resource_type="entry", restaurant_id=rest_a_id
+    )
+    rec_b1 = record_audit_event(
+        db=db_session, event_name="EVENT_B1", resource_type="entry", restaurant_id=rest_b_id
+    )
+    rec_a2 = record_audit_event(
+        db=db_session, event_name="EVENT_A2", resource_type="entry", restaurant_id=rest_a_id
+    )
     db_session.commit()
 
     # Rest A genesis
@@ -239,8 +296,14 @@ def test_tenant_isolated_audit_chains(audit_test_data, db_session: Session):
 # 4. Immutability & Transaction Rollback
 # ------------------------------------------------------------------------------
 
+
 def test_audit_log_immutability_update_blocked(audit_test_data, db_session: Session):
-    rec = record_audit_event(db=db_session, event_name="EVENT_ORIGINAL", resource_type="entry", restaurant_id=audit_test_data["rest_a"].id)
+    rec = record_audit_event(
+        db=db_session,
+        event_name="EVENT_ORIGINAL",
+        resource_type="entry",
+        restaurant_id=audit_test_data["rest_a"].id,
+    )
     db_session.commit()
 
     rec.event_name = "EVENT_TAMPERED"
@@ -256,7 +319,12 @@ def test_transaction_rollback_prevents_orphaned_audit(audit_test_data, db_sessio
 
     try:
         # Start transaction
-        record_audit_event(db=db_session, event_name="EVENT_TRANSIENT", resource_type="entry", restaurant_id=rest_id)
+        record_audit_event(
+            db=db_session,
+            event_name="EVENT_TRANSIENT",
+            resource_type="entry",
+            restaurant_id=rest_id,
+        )
         # Simulate business failure
         raise ValueError("Business transaction failed")
     except ValueError:
@@ -271,16 +339,31 @@ def test_transaction_rollback_prevents_orphaned_audit(audit_test_data, db_sessio
 # 5. Tampering & Gap Detection Tests
 # ------------------------------------------------------------------------------
 
+
 def test_tampered_payload_detection(audit_test_data, db_session: Session):
     rest_id = audit_test_data["rest_a"].id
 
-    record_audit_event(db=db_session, event_name="EVENT_1", resource_type="entry", restaurant_id=rest_id, payload_jsonb={"temp": 3.5})
-    rec2 = record_audit_event(db=db_session, event_name="EVENT_2", resource_type="entry", restaurant_id=rest_id, payload_jsonb={"temp": 4.0})
+    record_audit_event(
+        db=db_session,
+        event_name="EVENT_1",
+        resource_type="entry",
+        restaurant_id=rest_id,
+        payload_jsonb={"temp": 3.5},
+    )
+    rec2 = record_audit_event(
+        db=db_session,
+        event_name="EVENT_2",
+        resource_type="entry",
+        restaurant_id=rest_id,
+        payload_jsonb={"temp": 4.0},
+    )
     db_session.commit()
 
     # Directly mutate database payload behind the scenes
     db_session.execute(
-        AuditLog.__table__.update().where(AuditLog.id == rec2.id).values(payload_jsonb={"temp": 99.9})
+        AuditLog.__table__.update()
+        .where(AuditLog.id == rec2.id)
+        .values(payload_jsonb={"temp": 99.9})
     )
     db_session.commit()
     db_session.expire_all()
@@ -294,9 +377,15 @@ def test_tampered_payload_detection(audit_test_data, db_session: Session):
 def test_tampered_hash_and_broken_link_detection(audit_test_data, db_session: Session):
     rest_id = audit_test_data["rest_a"].id
 
-    rec1 = record_audit_event(db=db_session, event_name="EVENT_1", resource_type="entry", restaurant_id=rest_id)
-    rec2 = record_audit_event(db=db_session, event_name="EVENT_2", resource_type="entry", restaurant_id=rest_id)
-    rec3 = record_audit_event(db=db_session, event_name="EVENT_3", resource_type="entry", restaurant_id=rest_id)
+    record_audit_event(
+        db=db_session, event_name="EVENT_1", resource_type="entry", restaurant_id=rest_id
+    )
+    rec2 = record_audit_event(
+        db=db_session, event_name="EVENT_2", resource_type="entry", restaurant_id=rest_id
+    )
+    record_audit_event(
+        db=db_session, event_name="EVENT_3", resource_type="entry", restaurant_id=rest_id
+    )
     db_session.commit()
 
     # Tamper record_hash of rec2 directly in DB
@@ -319,9 +408,12 @@ def test_tampered_hash_and_broken_link_detection(audit_test_data, db_session: Se
 # 6. API Authorization & Endpoints
 # ------------------------------------------------------------------------------
 
+
 def test_api_list_audit_logs_manager_allowed(audit_test_data, db_session: Session):
     rest_id = audit_test_data["rest_a"].id
-    record_audit_event(db=db_session, event_name="EVENT_API_TEST", resource_type="entry", restaurant_id=rest_id)
+    record_audit_event(
+        db=db_session, event_name="EVENT_API_TEST", resource_type="entry", restaurant_id=rest_id
+    )
     db_session.commit()
 
     token_mgr = audit_test_data["token_manager_a"]
@@ -345,7 +437,9 @@ def test_api_list_audit_logs_staff_denied(audit_test_data):
 
 def test_api_verify_audit_chain_endpoint(audit_test_data, db_session: Session):
     rest_id = audit_test_data["rest_a"].id
-    record_audit_event(db=db_session, event_name="EVENT_API_VERIFY", resource_type="entry", restaurant_id=rest_id)
+    record_audit_event(
+        db=db_session, event_name="EVENT_API_VERIFY", resource_type="entry", restaurant_id=rest_id
+    )
     db_session.commit()
 
     token_mgr = audit_test_data["token_manager_a"]
@@ -360,7 +454,12 @@ def test_api_verify_audit_chain_endpoint(audit_test_data, db_session: Session):
 
 
 def test_api_audit_mutation_prohibited(audit_test_data, db_session: Session):
-    rec = record_audit_event(db=db_session, event_name="EVENT_IMMUTABLE", resource_type="entry", restaurant_id=audit_test_data["rest_a"].id)
+    rec = record_audit_event(
+        db=db_session,
+        event_name="EVENT_IMMUTABLE",
+        resource_type="entry",
+        restaurant_id=audit_test_data["rest_a"].id,
+    )
     db_session.commit()
 
     token_mgr = audit_test_data["token_manager_a"]

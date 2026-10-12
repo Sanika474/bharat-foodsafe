@@ -24,7 +24,9 @@ def generate_tasks_endpoint(
     result = service.generate_scheduled_tasks(db, tenant_ctx, req)
     return success_response(
         data=result.model_dump(),
-        meta={"message": f"Generated {result.tasks_created} new tasks, skipped {result.tasks_skipped_existing} existing."},
+        meta={
+            "message": f"Generated {result.tasks_created} new tasks, skipped {result.tasks_skipped_existing} existing."
+        },
         status_code=status.HTTP_201_CREATED,
     )
 
@@ -34,7 +36,11 @@ def generate_tasks_endpoint(
     summary="List tasks for current outlet with filtering and pagination",
 )
 def list_tasks_endpoint(
-    task_status: str | None = Query(None, alias="status", description="Filter by status (PENDING, IN_PROGRESS, COMPLETED, OVERDUE, MISSED)"),
+    task_status: str | None = Query(
+        None,
+        alias="status",
+        description="Filter by status (PENDING, IN_PROGRESS, COMPLETED, OVERDUE, MISSED)",
+    ),
     template_id: uuid.UUID | None = Query(None, description="Filter by parent template ID"),
     target_date: date | None = Query(None, description="Filter by target due date (YYYY-MM-DD)"),
     skip: int = Query(0, ge=0),
@@ -102,11 +108,14 @@ def create_task_entry_endpoint(
     )
 
     status_code = status.HTTP_200_OK if is_replayed else status.HTTP_201_CREATED
-    meta = {"replayed": is_replayed} if is_replayed else {"message": "Task entry executed successfully."}
+    meta = (
+        {"replayed": is_replayed}
+        if is_replayed
+        else {"message": "Task entry executed successfully."}
+    )
 
     return success_response(
         data=data,
         meta=meta,
         status_code=status_code,
     )
-

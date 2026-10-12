@@ -110,7 +110,9 @@ def execute_task_entry(
     tenant_ctx.validate_tenant_access(task.restaurant_id)
 
     # Validate Task Assignments (if assigned to specific staff members)
-    is_staff_only = "STAFF" in tenant_ctx.roles and not ("MANAGER" in tenant_ctx.roles or tenant_ctx.is_platform_admin())
+    is_staff_only = "STAFF" in tenant_ctx.roles and not (
+        "MANAGER" in tenant_ctx.roles or tenant_ctx.is_platform_admin()
+    )
     if is_staff_only and task.assignments:
         assigned_user_ids = [a.user_id for a in task.assignments]
         if tenant_ctx.user_id not in assigned_user_ids:
@@ -203,7 +205,11 @@ def execute_task_entry(
 
     # 4. Template Requirements & Input Payload Validation
     template_version = task.template_version
-    config = template_version.configuration_jsonb if template_version and template_version.configuration_jsonb else {}
+    config = (
+        template_version.configuration_jsonb
+        if template_version and template_version.configuration_jsonb
+        else {}
+    )
 
     # Check evidence requirement
     requires_evidence = config.get("requires_evidence", False)
@@ -212,7 +218,12 @@ def execute_task_entry(
             code="ENTRY_EVIDENCE_REQUIRED",
             message="Photo evidence is required for this task.",
             status_code=422,
-            details=[{"field": "evidence_file_id", "issue": "Field cannot be null for tasks requiring physical photo verification."}],
+            details=[
+                {
+                    "field": "evidence_file_id",
+                    "issue": "Field cannot be null for tasks requiring physical photo verification.",
+                }
+            ],
         )
 
     if req.evidence_file_id:
@@ -237,7 +248,12 @@ def execute_task_entry(
             code="ENTRY_EQUIPMENT_REQUIRED",
             message="Equipment binding is required for this task.",
             status_code=422,
-            details=[{"field": "equipment_id", "issue": "Field cannot be null for tasks requiring bound equipment."}],
+            details=[
+                {
+                    "field": "equipment_id",
+                    "issue": "Field cannot be null for tasks requiring bound equipment.",
+                }
+            ],
         )
 
     if req.equipment_id:
@@ -275,11 +291,15 @@ def execute_task_entry(
     )
 
     from app.modules.safety_rules.engine import evaluate_and_persist_entry_safety
+
     safety_result = evaluate_and_persist_entry_safety(db=db, entry=entry, task=task)
 
     if entry.safety_status == "CRITICAL":
         from app.modules.incidents.service import trigger_critical_deviation_incident
-        trigger_critical_deviation_incident(db=db, entry=entry, task=task, evaluation_details=safety_result.details)
+
+        trigger_critical_deviation_incident(
+            db=db, entry=entry, task=task, evaluation_details=safety_result.details
+        )
 
     repository.update_task_status(
         db=db,
@@ -289,6 +309,7 @@ def execute_task_entry(
     )
 
     from app.core.audit import record_audit_event
+
     record_audit_event(
         db=db,
         event_name="TASK_ENTRY_CREATED",
@@ -298,16 +319,20 @@ def execute_task_entry(
         resource_id=entry.id,
         payload_jsonb={
             "task_id": str(task.id),
-            "value_numeric": float(entry.value_numeric) if entry.value_numeric is not None else None,
+            "value_numeric": float(entry.value_numeric)
+            if entry.value_numeric is not None
+            else None,
             "unit": entry.unit,
             "safety_status": entry.safety_status,
         },
     )
 
     from app.modules.anomaly.service import evaluate_entry_anomaly
+
     evaluate_entry_anomaly(db=db, entry=entry, user_id=tenant_ctx.user_id)
 
     from app.modules.outbox.service import record_outbox_event
+
     record_outbox_event(
         db=db,
         event_type="TASK_COMPLETED",
@@ -356,4 +381,3 @@ def execute_task_entry(
     db.commit()
 
     return response_data, False
-

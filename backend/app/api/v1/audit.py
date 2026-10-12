@@ -64,7 +64,11 @@ def get_audit_log(
 ):
     record = audit.get_audit_log_by_id(db, audit_id)
     if not record:
-        raise AppException(code="AUDIT_LOG_NOT_FOUND", message=f"Audit log entry '{audit_id}' not found.", status_code=404)
+        raise AppException(
+            code="AUDIT_LOG_NOT_FOUND",
+            message=f"Audit log entry '{audit_id}' not found.",
+            status_code=404,
+        )
     if record.restaurant_id:
         tenant_ctx.validate_tenant_access(record.restaurant_id)
     return success_response(data=AuditLogResponse.model_validate(record).model_dump(mode="json"))

@@ -19,9 +19,7 @@ def get_user_by_email(db: Session, email: str) -> User | None:
 
 def get_user_roles(db: Session, user_id: uuid.UUID) -> list[str]:
     user_roles_records = (
-        db.query(UserRole)
-        .filter(UserRole.user_id == user_id, UserRole.revoked_at.is_(None))
-        .all()
+        db.query(UserRole).filter(UserRole.user_id == user_id, UserRole.revoked_at.is_(None)).all()
     )
     return [ur.role.name for ur in user_roles_records if ur.role]
 

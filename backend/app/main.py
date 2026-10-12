@@ -48,10 +48,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     formatted_details = []
     for error in exc.errors():
         loc_str = " -> ".join(str(x) for x in error.get("loc", []))
-        formatted_details.append({
-            "field": loc_str,
-            "issue": error.get("msg", "Validation error"),
-        })
+        formatted_details.append(
+            {
+                "field": loc_str,
+                "issue": error.get("msg", "Validation error"),
+            }
+        )
 
     return error_response(
         code="VALIDATION_ERROR",

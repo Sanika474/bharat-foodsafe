@@ -27,9 +27,15 @@ class RuleEvaluationResult(BaseModel):
 
 
 class StandaloneEvaluateRequest(BaseModel):
-    task_id: uuid.UUID | None = Field(default=None, description="Task ID to resolve template/category bindings")
-    category_id: uuid.UUID | None = Field(default=None, description="Task category ID for binding lookup")
-    template_id: uuid.UUID | None = Field(default=None, description="Task template ID for binding lookup")
+    task_id: uuid.UUID | None = Field(
+        default=None, description="Task ID to resolve template/category bindings"
+    )
+    category_id: uuid.UUID | None = Field(
+        default=None, description="Task category ID for binding lookup"
+    )
+    template_id: uuid.UUID | None = Field(
+        default=None, description="Task template ID for binding lookup"
+    )
     value_numeric: float | None = Field(default=None, description="Numeric observation value")
     value_text: str | None = Field(default=None, description="Text observation value")
     value_jsonb: Any | None = Field(default=None, description="JSON observation payload")
@@ -59,10 +65,14 @@ class SafetyRuleCreateRequest(BaseModel):
     rule_code: str = Field(..., description="Unique rule code identifier")
     name: str = Field(..., description="Rule title/name")
     description: str | None = Field(default=None, description="Rule description")
-    condition_jsonb: dict[str, Any] = Field(..., description="Deterministic rule evaluation conditions")
+    condition_jsonb: dict[str, Any] = Field(
+        ..., description="Deterministic rule evaluation conditions"
+    )
     action_jsonb: dict[str, Any] = Field(..., description="Rule action and default safety status")
     category_id: uuid.UUID | None = Field(default=None, description="Bind rule to category")
-    template_id: uuid.UUID | None = Field(default=None, description="Bind rule to specific task template")
+    template_id: uuid.UUID | None = Field(
+        default=None, description="Bind rule to specific task template"
+    )
 
 
 class RuleSourceResponse(BaseModel):
