@@ -391,3 +391,35 @@ def test_list_templates_returns_tenant_scoped_records(template_test_data):
     assert isinstance(body["data"], list)
     assert len(body["data"]) >= 1
     assert body["data"][0]["restaurant_id"] == str(template_test_data["rest_a"].id)
+
+
+def test_cross_tenant_template_listing_isolation(template_test_data):
+    token_mgr_a = template_test_data["token_mgr_a"]
+    token_mgr_b = template_test_data["token_mgr_b"]
+    category_id = str(template_test_data["category"].id)
+
+    post_res = client.post(
+        "/api/v1/task-templates",
+        json={
+            "category_id": category_id,
+            "name": "Secret Tenant A Template",
+            "code": f"T_SEC_{uuid.uuid4().hex[:4]}",
+            "configuration_jsonb": {"audit": "strict"},
+        },
+        headers={"Authorization": f"Bearer {token_mgr_a}"},
+    )
+    assert post_res.status_code == 201
+    tmpl_a_id = post_res.json()["data"]["id"]
+
+    # Manager B lists task templates
+    list_res_b = client.get(
+        "/api/v1/task-templates",
+        headers={"Authorization": f"Bearer {token_mgr_b}"},
+    )
+    assert list_res_b.status_code == 200
+    templates_b = list_res_b.json()["data"]
+
+    # Assert Tenant A's template never appears in Tenant B's listing
+    assert tmpl_a_id not in [t["id"] for t in templates_b]
+    for t in templates_b:
+        assert t["restaurant_id"] == str(template_test_data["rest_b"].id)

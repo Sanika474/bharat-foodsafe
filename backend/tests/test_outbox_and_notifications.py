@@ -563,3 +563,115 @@ def test_api_notification_preferences_get_and_put(outbox_test_data):
     )
     assert res_get.status_code == 200
     assert len(res_get.json()["data"]) >= 1
+
+
+def test_cross_tenant_notification_list_isolated(outbox_test_data, db_session: Session):
+    rest_a_id = outbox_test_data["rest_a"].id
+    rest_b_id = outbox_test_data["rest_b"].id
+    staff_a1 = outbox_test_data["staff_a1"]
+    staff_b1 = outbox_test_data["staff_b1"]
+    token_staff_b = outbox_test_data["token_staff_b1"]
+
+    n_a = Notification(
+        id=uuid.uuid4(),
+        restaurant_id=rest_a_id,
+        user_id=staff_a1.id,
+        title="Tenant A Alert",
+        message="Confidential kitchen notification",
+        event_type="TASK_OVERDUE",
+    )
+    n_b = Notification(
+        id=uuid.uuid4(),
+        restaurant_id=rest_b_id,
+        user_id=staff_b1.id,
+        title="Tenant B Alert",
+        message="Regular operational update",
+        event_type="SYSTEM",
+    )
+    db_session.add_all([n_a, n_b])
+    db_session.commit()
+
+    res = client.get(
+        "/api/v1/notifications",
+        headers={"Authorization": f"Bearer {token_staff_b}"},
+    )
+    assert res.status_code == 200
+    data = res.json()["data"]
+    notif_ids = [item["id"] for item in data["notifications"]]
+
+    assert str(n_b.id) in notif_ids
+    assert str(n_a.id) not in notif_ids
+    for item in data["notifications"]:
+        assert item["restaurant_id"] == str(rest_b_id)
+
+
+def test_cross_tenant_notification_mark_read_denied(outbox_test_data, db_session: Session):
+    rest_a_id = outbox_test_data["rest_a"].id
+    staff_a1 = outbox_test_data["staff_a1"]
+    token_staff_b = outbox_test_data["token_staff_b1"]
+
+    n_a = Notification(
+        id=uuid.uuid4(),
+        restaurant_id=rest_a_id,
+        user_id=staff_a1.id,
+        title="Tenant A Task Reminder",
+        message="Important sanitation reminder",
+        event_type="TASK_REMINDER",
+        read_at=None,
+    )
+    db_session.add(n_a)
+    db_session.commit()
+
+    # Staff B attempts to mark Tenant A's notification as read -> 404 NOTIFICATION_NOT_FOUND
+    res = client.patch(
+        f"/api/v1/notifications/{n_a.id}/read",
+        headers={"Authorization": f"Bearer {token_staff_b}"},
+    )
+    assert res.status_code == 404
+    assert res.json()["error"]["code"] == "NOTIFICATION_NOT_FOUND"
+
+    # Confirm Tenant A's notification remains unread in database
+    db_session.refresh(n_a)
+    assert n_a.read_at is None
+
+
+def test_cross_tenant_notification_mark_all_read_isolated(outbox_test_data, db_session: Session):
+    rest_a_id = outbox_test_data["rest_a"].id
+    rest_b_id = outbox_test_data["rest_b"].id
+    staff_a1 = outbox_test_data["staff_a1"]
+    staff_b1 = outbox_test_data["staff_b1"]
+    token_staff_b = outbox_test_data["token_staff_b1"]
+
+    n_a = Notification(
+        id=uuid.uuid4(),
+        restaurant_id=rest_a_id,
+        user_id=staff_a1.id,
+        title="Tenant A Notice",
+        message="Notice A",
+        event_type="SYSTEM",
+        read_at=None,
+    )
+    n_b = Notification(
+        id=uuid.uuid4(),
+        restaurant_id=rest_b_id,
+        user_id=staff_b1.id,
+        title="Tenant B Notice",
+        message="Notice B",
+        event_type="SYSTEM",
+        read_at=None,
+    )
+    db_session.add_all([n_a, n_b])
+    db_session.commit()
+
+    # Staff B triggers mark-all-read
+    res = client.post(
+        "/api/v1/notifications/read-all",
+        headers={"Authorization": f"Bearer {token_staff_b}"},
+    )
+    assert res.status_code == 200
+
+    # Tenant B's notification is marked read, but Tenant A's remains untouched
+    db_session.refresh(n_b)
+    db_session.refresh(n_a)
+    assert n_b.read_at is not None
+    assert n_a.read_at is None

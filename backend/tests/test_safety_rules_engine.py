@@ -80,15 +80,26 @@ def rules_test_data(db_session: Session):
         phone=f"+9188{uuid.uuid4().hex[:8]}",
         status="ACTIVE",
     )
-    db_session.add(user_a)
+    user_b = User(
+        id=uuid.uuid4(),
+        restaurant_id=rest_b.id,
+        name="Staff User B",
+        phone=f"+9189{uuid.uuid4().hex[:8]}",
+        status="ACTIVE",
+    )
+    db_session.add_all([user_a, user_b])
     db_session.commit()
 
     db_session.add(
         UserRole(id=uuid.uuid4(), user_id=user_a.id, role_id=staff_role.id, restaurant_id=rest_a.id)
     )
+    db_session.add(
+        UserRole(id=uuid.uuid4(), user_id=user_b.id, role_id=staff_role.id, restaurant_id=rest_b.id)
+    )
     db_session.commit()
 
     token_a, _ = create_access_token(user_id=user_a.id, tenant_id=rest_a.id, roles=["STAFF"])
+    token_b, _ = create_access_token(user_id=user_b.id, tenant_id=rest_b.id, roles=["STAFF"])
 
     # Rule Sources: Verified vs Draft
     source_verified = RuleSource(
@@ -195,7 +206,9 @@ def rules_test_data(db_session: Session):
         "rest_a": rest_a,
         "rest_b": rest_b,
         "user_a": user_a,
+        "user_b": user_b,
         "token_a": token_a,
+        "token_b": token_b,
         "source_verified": source_verified,
         "cat_a": cat_a,
         "tmpl_a": tmpl_a,
@@ -821,3 +834,51 @@ def test_repository_and_service_direct_functions(db_session: Session, rules_test
     )
     assert binding is not None
     assert repository.get_rule_source_by_code(db_session, src.source_code) is not None
+
+
+# ------------------------------------------------------------------------------
+# 7. Cross-Tenant Authorization & Safety Rules Scope Tests
+# Note: Custom safety rules do not have tenant-scoped CRUD API endpoints
+# (rules are system-wide/regulatory and bound to categories/templates).
+# ------------------------------------------------------------------------------
+
+
+def test_cross_tenant_entry_evaluations_access_denied(rules_test_data, db_session: Session):
+    rest_a_id = rules_test_data["rest_a"].id
+    task = rules_test_data["task"]
+    user_a = rules_test_data["user_a"]
+    token_b = rules_test_data["token_b"]
+
+    entry_a = Entry(
+        id=uuid.uuid4(),
+        restaurant_id=rest_a_id,
+        task_id=task.id,
+        user_id=user_a.id,
+        value_numeric=3.5,
+        unit="C",
+        safety_status="NORMAL",
+    )
+    db_session.add(entry_a)
+    db_session.commit()
+
+    # User B from Tenant B attempts to access Tenant A's entry evaluations -> 403 FORBIDDEN_CROSS_TENANT
+    res = client.get(
+        f"/api/v1/safety-rules/entries/{entry_a.id}/evaluations",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+    assert res.status_code == 403
+    assert res.json()["error"]["code"] == "FORBIDDEN_CROSS_TENANT"
+
+
+def test_cross_tenant_standalone_evaluation_with_task_id_denied(rules_test_data):
+    task = rules_test_data["task"]  # Belongs to Tenant A
+    token_b = rules_test_data["token_b"]  # Belongs to Tenant B
+
+    # User B attempts to evaluate observation with Tenant A's task_id -> 403 FORBIDDEN_CROSS_TENANT
+    res = client.post(
+        "/api/v1/safety-rules/evaluate",
+        json={"task_id": str(task.id), "value_numeric": 3.5, "unit": "C"},
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+    assert res.status_code == 403
+    assert res.json()["error"]["code"] == "FORBIDDEN_CROSS_TENANT"

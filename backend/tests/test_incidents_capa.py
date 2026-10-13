@@ -102,7 +102,14 @@ def incident_test_data(db_session: Session):
         phone=f"+9184{uuid.uuid4().hex[:8]}",
         status="ACTIVE",
     )
-    db_session.add_all([staff_a1, staff_a2, manager_a, staff_b1])
+    manager_b = User(
+        id=uuid.uuid4(),
+        restaurant_id=rest_b.id,
+        name="Incident Manager B",
+        phone=f"+9187{uuid.uuid4().hex[:8]}",
+        status="ACTIVE",
+    )
+    db_session.add_all([staff_a1, staff_a2, manager_a, staff_b1, manager_b])
     db_session.commit()
 
     db_session.add(
@@ -125,6 +132,11 @@ def incident_test_data(db_session: Session):
             id=uuid.uuid4(), user_id=staff_b1.id, role_id=staff_role.id, restaurant_id=rest_b.id
         )
     )
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=manager_b.id, role_id=manager_role.id, restaurant_id=rest_b.id
+        )
+    )
     db_session.commit()
 
     # JWT Tokens
@@ -139,6 +151,9 @@ def incident_test_data(db_session: Session):
     )
     token_staff_b1, _ = create_access_token(
         user_id=staff_b1.id, tenant_id=rest_b.id, roles=["STAFF"]
+    )
+    token_manager_b, _ = create_access_token(
+        user_id=manager_b.id, tenant_id=rest_b.id, roles=["MANAGER"]
     )
 
     # Rule Source
@@ -249,10 +264,12 @@ def incident_test_data(db_session: Session):
         "staff_a2": staff_a2,
         "manager_a": manager_a,
         "staff_b1": staff_b1,
+        "manager_b": manager_b,
         "token_staff_a1": token_staff_a1,
         "token_staff_a2": token_staff_a2,
         "token_manager_a": token_manager_a,
         "token_staff_b1": token_staff_b1,
+        "token_manager_b": token_manager_b,
         "safety_rule": safety_rule,
         "task1": task1,
         "task2": task2,
@@ -754,3 +771,88 @@ def test_cross_tenant_corrective_action_complete_forbidden(incident_test_data, d
     )
     assert complete_res.status_code == 403
     assert complete_res.json()["error"]["code"] == "FORBIDDEN_CROSS_TENANT"
+
+
+def test_cross_tenant_incident_listing_isolation(incident_test_data, db_session: Session):
+    token_staff1 = incident_test_data["token_staff_a1"]
+    token_staff_b1 = incident_test_data["token_staff_b1"]
+
+    res = client.post(
+        f"/api/v1/tasks/{incident_test_data['task1'].id}/entries",
+        json={"value_numeric": 9.0, "unit": "C"},
+        headers={"Authorization": f"Bearer {token_staff1}"},
+    )
+    entry_id = res.json()["data"]["id"]
+    inc = db_session.query(Incident).filter_by(entry_id=entry_id).first()
+
+    # Staff B lists incidents
+    list_res = client.get(
+        "/api/v1/incidents",
+        headers={"Authorization": f"Bearer {token_staff_b1}"},
+    )
+    assert list_res.status_code == 200
+    data = list_res.json()["data"]
+    inc_ids = [item["id"] for item in data["incidents"]]
+
+    # Assert Tenant A's incident never appears in Tenant B's incident list
+    assert str(inc.id) not in inc_ids
+    for item in data["incidents"]:
+        assert item["restaurant_id"] == str(incident_test_data["rest_b"].id)
+
+
+def test_cross_tenant_corrective_action_operations_forbidden(
+    incident_test_data, db_session: Session
+):
+    token_staff1 = incident_test_data["token_staff_a1"]
+    token_staff_b1 = incident_test_data["token_staff_b1"]
+    token_manager_b = incident_test_data["token_manager_b"]
+
+    res = client.post(
+        f"/api/v1/tasks/{incident_test_data['task1'].id}/entries",
+        json={"value_numeric": 9.0, "unit": "C"},
+        headers={"Authorization": f"Bearer {token_staff1}"},
+    )
+    entry_id = res.json()["data"]["id"]
+    inc = db_session.query(Incident).filter_by(entry_id=entry_id).first()
+    ca = db_session.query(CorrectiveAction).filter_by(incident_id=inc.id).first()
+
+    # 1. Staff B tries GET /corrective-actions/{ca.id} -> 403 FORBIDDEN_CROSS_TENANT
+    get_res = client.get(
+        f"/api/v1/corrective-actions/{ca.id}",
+        headers={"Authorization": f"Bearer {token_staff_b1}"},
+    )
+    assert get_res.status_code == 403
+    assert get_res.json()["error"]["code"] == "FORBIDDEN_CROSS_TENANT"
+
+    # 2. Staff B lists /corrective-actions -> Tenant A's CA never appears
+    list_res = client.get(
+        "/api/v1/corrective-actions",
+        headers={"Authorization": f"Bearer {token_staff_b1}"},
+    )
+    assert list_res.status_code == 200
+    ca_ids = [c["id"] for c in list_res.json()["data"]["corrective_actions"]]
+    assert str(ca.id) not in ca_ids
+
+    # 3. Manager B tries to assign Tenant A's CAPA -> 403 FORBIDDEN_CROSS_TENANT
+    assign_res = client.post(
+        f"/api/v1/corrective-actions/{ca.id}/assign",
+        json={"assigned_to": str(incident_test_data["staff_b1"].id), "due_minutes": 60},
+        headers={"Authorization": f"Bearer {token_manager_b}"},
+    )
+    assert assign_res.status_code == 403
+    assert assign_res.json()["error"]["code"] == "FORBIDDEN_CROSS_TENANT"
+
+    # 4. Manager B tries to verify Tenant A's CAPA -> 403 FORBIDDEN_CROSS_TENANT
+    verify_res = client.post(
+        f"/api/v1/corrective-actions/{ca.id}/verify",
+        json={"approved": True, "notes": "Hacked verify"},
+        headers={"Authorization": f"Bearer {token_manager_b}"},
+    )
+    assert verify_res.status_code == 403
+    assert verify_res.json()["error"]["code"] == "FORBIDDEN_CROSS_TENANT"
+
+    # 5. Verify Tenant A's CAPA remains untouched in the database
+    db_session.refresh(ca)
+    assert ca.status == "PENDING"
+    assert ca.assigned_to is None
+    assert ca.verified_at is None

@@ -688,6 +688,23 @@ def test_cross_tenant_task_execution_forbidden(exec_test_data):
     assert res.json()["error"]["code"] == "FORBIDDEN_CROSS_TENANT"
 
 
+def test_cross_tenant_task_listing_isolation(exec_test_data):
+    token_staff_b1 = exec_test_data["token_staff_b1"]
+    task1_id = str(exec_test_data["task1"].id)
+
+    res = client.get(
+        "/api/v1/tasks",
+        headers={"Authorization": f"Bearer {token_staff_b1}"},
+    )
+    assert res.status_code == 200
+    tasks_b = res.json()["data"]
+
+    task_ids = [t["id"] for t in tasks_b]
+    assert task1_id not in task_ids
+    for task_item in tasks_b:
+        assert task_item["restaurant_id"] == str(exec_test_data["rest_b"].id)
+
+
 def test_unauthenticated_request_rejected():
     task_id = str(uuid.uuid4())
     res = client.post(

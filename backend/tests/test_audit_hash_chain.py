@@ -90,7 +90,14 @@ def audit_test_data(db_session: Session):
         phone=f"+9173{uuid.uuid4().hex[:8]}",
         status="ACTIVE",
     )
-    db_session.add_all([staff_a1, manager_a, staff_b1])
+    manager_b = User(
+        id=uuid.uuid4(),
+        restaurant_id=rest_b.id,
+        name="Audit Manager B",
+        phone=f"+9174{uuid.uuid4().hex[:8]}",
+        status="ACTIVE",
+    )
+    db_session.add_all([staff_a1, manager_a, staff_b1, manager_b])
     db_session.commit()
 
     db_session.add(
@@ -108,6 +115,11 @@ def audit_test_data(db_session: Session):
             id=uuid.uuid4(), user_id=staff_b1.id, role_id=staff_role.id, restaurant_id=rest_b.id
         )
     )
+    db_session.add(
+        UserRole(
+            id=uuid.uuid4(), user_id=manager_b.id, role_id=manager_role.id, restaurant_id=rest_b.id
+        )
+    )
     db_session.commit()
 
     token_staff_a1, _ = create_access_token(
@@ -119,6 +131,9 @@ def audit_test_data(db_session: Session):
     token_staff_b1, _ = create_access_token(
         user_id=staff_b1.id, tenant_id=rest_b.id, roles=["STAFF"]
     )
+    token_manager_b, _ = create_access_token(
+        user_id=manager_b.id, tenant_id=rest_b.id, roles=["MANAGER"]
+    )
 
     yield {
         "rest_a": rest_a,
@@ -126,9 +141,11 @@ def audit_test_data(db_session: Session):
         "staff_a1": staff_a1,
         "manager_a": manager_a,
         "staff_b1": staff_b1,
+        "manager_b": manager_b,
         "token_staff_a1": token_staff_a1,
         "token_manager_a": token_manager_a,
         "token_staff_b1": token_staff_b1,
+        "token_manager_b": token_manager_b,
     }
 
     # Cleanup
@@ -290,6 +307,100 @@ def test_tenant_isolated_audit_chains(audit_test_data, db_session: Session):
     res_b = verify_audit_chain(db_session, restaurant_id=rest_b_id)
     assert res_b["is_valid"] is True
     assert res_b["records_scanned"] == 1
+
+
+def test_cross_tenant_audit_log_by_id_forbidden(audit_test_data, db_session: Session):
+    rest_a_id = audit_test_data["rest_a"].id
+    rec_a = record_audit_event(
+        db=db_session,
+        event_name="CONFIDENTIAL_A_EVENT",
+        resource_type="entry",
+        restaurant_id=rest_a_id,
+    )
+    db_session.commit()
+
+    # Manager B attempts to retrieve Tenant A's audit record by ID -> 403 FORBIDDEN_CROSS_TENANT
+    res = client.get(
+        f"/api/v1/audit/logs/{rec_a.id}",
+        headers={"Authorization": f"Bearer {audit_test_data['token_manager_b']}"},
+    )
+    assert res.status_code == 403
+    assert res.json()["error"]["code"] == "FORBIDDEN_CROSS_TENANT"
+
+    # Staff B also rejected by role guard -> 403
+    res_staff = client.get(
+        f"/api/v1/audit/logs/{rec_a.id}",
+        headers={"Authorization": f"Bearer {audit_test_data['token_staff_b1']}"},
+    )
+    assert res_staff.status_code == 403
+
+
+def test_cross_tenant_audit_logs_list_isolated(audit_test_data, db_session: Session):
+    rest_a_id = audit_test_data["rest_a"].id
+    rest_b_id = audit_test_data["rest_b"].id
+
+    rec_a = record_audit_event(
+        db=db_session, event_name="REST_A_EVENT", resource_type="entry", restaurant_id=rest_a_id
+    )
+    rec_b = record_audit_event(
+        db=db_session, event_name="REST_B_EVENT", resource_type="entry", restaurant_id=rest_b_id
+    )
+    db_session.commit()
+
+    # Manager B lists audit logs
+    res = client.get(
+        "/api/v1/audit/logs",
+        headers={"Authorization": f"Bearer {audit_test_data['token_manager_b']}"},
+    )
+    assert res.status_code == 200
+    data = res.json()["data"]
+    log_ids = [log_item["id"] for log_item in data["logs"]]
+
+    # Assert Tenant B's log is present, Tenant A's log is completely excluded
+    assert str(rec_b.id) in log_ids
+    assert str(rec_a.id) not in log_ids
+    for log_item in data["logs"]:
+        assert log_item["restaurant_id"] == str(rest_b_id)
+
+
+def test_cross_tenant_audit_chain_verification_isolated(audit_test_data, db_session: Session):
+    rest_a_id = audit_test_data["rest_a"].id
+    rest_b_id = audit_test_data["rest_b"].id
+
+    rec_a1 = record_audit_event(
+        db=db_session, event_name="REST_A_1", resource_type="entry", restaurant_id=rest_a_id
+    )
+    record_audit_event(
+        db=db_session, event_name="REST_A_2", resource_type="entry", restaurant_id=rest_a_id
+    )
+    record_audit_event(
+        db=db_session, event_name="REST_B_1", resource_type="entry", restaurant_id=rest_b_id
+    )
+    db_session.commit()
+
+    # Tamper with Tenant A's record hash to simulate a broken chain in Tenant A
+    db_session.query(AuditLog).filter_by(id=rec_a1.id).update({"record_hash": "0" * 64})
+    db_session.commit()
+
+    # Manager B triggers audit verification via API:
+    # Must remain valid and scan strictly Tenant B's 1 record (not affected by Tenant A's corrupted chain)
+    res_b = client.post(
+        "/api/v1/audit/verify",
+        headers={"Authorization": f"Bearer {audit_test_data['token_manager_b']}"},
+    )
+    assert res_b.status_code == 200
+    data_b = res_b.json()["data"]
+    assert data_b["is_valid"] is True
+    assert data_b["records_scanned"] == 1
+
+    # Contrast with Manager A: Tenant A's broken chain is detected
+    res_a = client.post(
+        "/api/v1/audit/verify",
+        headers={"Authorization": f"Bearer {audit_test_data['token_manager_a']}"},
+    )
+    assert res_a.status_code == 200
+    data_a = res_a.json()["data"]
+    assert data_a["is_valid"] is False
 
 
 # ------------------------------------------------------------------------------
