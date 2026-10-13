@@ -5,6 +5,7 @@ import {
   setAccessToken,
   getAccessToken,
   setOnSessionExpired,
+  getApiErrorMessage,
 } from '../client';
 
 describe('API Client & Interceptors', () => {
@@ -22,14 +23,80 @@ describe('API Client & Interceptors', () => {
       expect(getAccessToken()).toBeNull();
       setAccessToken('test-token-123');
       expect(getAccessToken()).toBe('test-token-123');
+      expect(apiClient.defaults.headers.common.Authorization).toBe('Bearer test-token-123');
       setAccessToken(null);
       expect(getAccessToken()).toBeNull();
+      expect(apiClient.defaults.headers.common.Authorization).toBeUndefined();
     });
 
     it('registers onSessionExpired callback', () => {
       const cb = vi.fn();
       setOnSessionExpired(cb);
       // Callback is retained in module scope
+    });
+  });
+
+  describe('getApiErrorMessage helper', () => {
+    it('extracts error.message from backend ApiResponse payload', () => {
+      const axiosErr: any = {
+        isAxiosError: true,
+        response: {
+          data: {
+            error: {
+              code: 'RULE_VIOLATION',
+              message: 'Temperature exceeds safety threshold.',
+            },
+          },
+        },
+      };
+      expect(getApiErrorMessage(axiosErr)).toBe('Temperature exceeds safety threshold.');
+    });
+
+    it('extracts detail string when provided', () => {
+      const axiosErr: any = {
+        isAxiosError: true,
+        response: {
+          data: {
+            detail: 'Item not found in tenant database.',
+          },
+        },
+      };
+      expect(getApiErrorMessage(axiosErr)).toBe('Item not found in tenant database.');
+    });
+
+    it('extracts first validation error msg from detail array', () => {
+      const axiosErr: any = {
+        isAxiosError: true,
+        response: {
+          data: {
+            detail: [{ msg: 'Field is required' }],
+          },
+        },
+      };
+      expect(getApiErrorMessage(axiosErr)).toBe('Field is required');
+    });
+
+    it('returns friendly messages for standard HTTP status codes without payload', () => {
+      expect(getApiErrorMessage({ isAxiosError: true, response: { status: 401 } })).toBe(
+        'Session expired or unauthenticated. Please sign in again.'
+      );
+      expect(getApiErrorMessage({ isAxiosError: true, response: { status: 403 } })).toBe(
+        'You do not have permission to perform this action.'
+      );
+      expect(getApiErrorMessage({ isAxiosError: true, response: { status: 404 } })).toBe(
+        'The requested resource was not found.'
+      );
+      expect(getApiErrorMessage({ isAxiosError: true, response: { status: 500 } })).toBe(
+        'A server error occurred. Please try again later.'
+      );
+      expect(getApiErrorMessage({ isAxiosError: true, code: 'ERR_NETWORK' })).toBe(
+        'Network connection error. Please check your internet connection.'
+      );
+    });
+
+    it('falls back to standard Error message and default string', () => {
+      expect(getApiErrorMessage(new Error('Local error'))).toBe('Local error');
+      expect(getApiErrorMessage('Something unexpected')).toBe('An unexpected error occurred.');
     });
   });
 
@@ -250,6 +317,38 @@ describe('API Client & Interceptors', () => {
 
       await expect(prom1).rejects.toThrow('Refresh Failed Completely');
       await expect(prom2).rejects.toThrow('Refresh Failed Completely');
+
+      postSpy.mockRestore();
+    });
+
+    it('discards refreshed token if logout occurs while refresh is in flight', async () => {
+      const responseInterceptor = (apiClient.interceptors.response as any).handlers[0];
+
+      let resolveRefresh: (val: any) => void;
+      const refreshPromise = new Promise((resolve) => {
+        resolveRefresh = resolve;
+      });
+
+      const postSpy = vi.spyOn(axios, 'post').mockImplementation(() => refreshPromise as any);
+
+      const req: any = { url: '/req1', headers: {} };
+      const prom = responseInterceptor.rejected({ response: { status: 401 }, config: req });
+
+      // User logs out while refresh is in flight
+      setAccessToken(null);
+
+      // In-flight refresh completes after logout
+      resolveRefresh!({
+        data: {
+          data: {
+            access_token: 'stale-restored-token',
+          },
+        },
+      });
+
+      await expect(prom).rejects.toThrow('Session terminated during token refresh.');
+      expect(getAccessToken()).toBeNull();
+      expect(apiClient.defaults.headers.common.Authorization).toBeUndefined();
 
       postSpy.mockRestore();
     });
