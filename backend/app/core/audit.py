@@ -1,5 +1,7 @@
+import argparse
 import hashlib
 import json
+import sys
 import uuid
 from datetime import datetime, timezone
 from typing import Sequence
@@ -136,24 +138,20 @@ def record_audit_event(
     return audit_entry
 
 
-def verify_audit_chain(
+def _verify_single_chain(
     db: Session,
     restaurant_id: uuid.UUID | str | None = None,
-) -> dict:
-    """
-    Verifies the integrity of the audit hash chain.
-    Detects:
-    - Genesis previous_hash violation
-    - Previous-hash linkage breaks / gaps
-    - Payload/hash tampering (computed hash mismatch)
-    """
+    is_global: bool = False,
+) -> tuple[int, list[dict]]:
+    """Helper that verifies an individual chain (for a tenant or global system scope)."""
     stmt = select(AuditLog)
-    if restaurant_id:
+    if is_global or restaurant_id is None:
+        stmt = stmt.where(AuditLog.restaurant_id.is_(None))
+    else:
         stmt = stmt.where(AuditLog.restaurant_id == restaurant_id)
     stmt = stmt.order_by(AuditLog.created_at.asc(), AuditLog.id.asc())
 
     records = db.scalars(stmt).all()
-
     errors = []
     expected_previous_hash = GENESIS_PREVIOUS_HASH
 
@@ -163,6 +161,7 @@ def verify_audit_chain(
             errors.append(
                 {
                     "record_id": str(record.id),
+                    "restaurant_id": str(record.restaurant_id) if record.restaurant_id else None,
                     "index": idx,
                     "error_type": "PREVIOUS_HASH_MISMATCH",
                     "expected_previous_hash": expected_previous_hash,
@@ -188,6 +187,7 @@ def verify_audit_chain(
             errors.append(
                 {
                     "record_id": str(record.id),
+                    "restaurant_id": str(record.restaurant_id) if record.restaurant_id else None,
                     "index": idx,
                     "error_type": "TAMPERED_RECORD_HASH",
                     "expected_record_hash": expected_hash,
@@ -199,12 +199,53 @@ def verify_audit_chain(
         # Set next record's expected previous_hash to current stored record_hash
         expected_previous_hash = record.record_hash
 
-    is_valid = len(errors) == 0
+    return len(records), errors
+
+
+def verify_audit_chain(
+    db: Session,
+    restaurant_id: uuid.UUID | str | None = None,
+) -> dict:
+    """
+    Verifies the integrity of the audit hash chain.
+    If restaurant_id is provided, verifies that tenant's chain.
+    If restaurant_id is None, verifies all tenant chains and the global chain across the database.
+    Detects:
+    - Genesis previous_hash violation
+    - Previous-hash linkage breaks / gaps
+    - Payload/hash tampering (computed hash mismatch)
+    """
+    if restaurant_id is not None:
+        records_scanned, errors = _verify_single_chain(db, restaurant_id=restaurant_id)
+        return {
+            "is_valid": len(errors) == 0,
+            "records_scanned": records_scanned,
+            "errors": errors,
+        }
+
+    # Verify all chains across all tenants and global scope
+    total_scanned = 0
+    all_errors = []
+
+    tenant_ids = db.scalars(
+        select(AuditLog.restaurant_id).where(AuditLog.restaurant_id.is_not(None)).distinct()
+    ).all()
+
+    for t_id in tenant_ids:
+        scanned, errors = _verify_single_chain(db, restaurant_id=t_id)
+        total_scanned += scanned
+        all_errors.extend(errors)
+
+    has_global = db.scalar(select(AuditLog.id).where(AuditLog.restaurant_id.is_(None)).limit(1))
+    if has_global:
+        scanned, errors = _verify_single_chain(db, restaurant_id=None, is_global=True)
+        total_scanned += scanned
+        all_errors.extend(errors)
 
     return {
-        "is_valid": is_valid,
-        "records_scanned": len(records),
-        "errors": errors,
+        "is_valid": len(all_errors) == 0,
+        "records_scanned": total_scanned,
+        "errors": all_errors,
     }
 
 
@@ -265,3 +306,76 @@ def _prevent_audit_log_delete(mapper, connection, target):
         message="Audit log records are immutable and cannot be deleted.",
         status_code=409,
     )
+
+
+# ------------------------------------------------------------------------------
+# Standalone CLI Verification Entrypoint
+# ------------------------------------------------------------------------------
+
+
+def main(argv: list[str] | None = None) -> int:
+    """
+    CLI runner for Bharat FoodSafe audit-chain integrity verification.
+    Usage:
+        python -m app.core.audit [--restaurant-id <UUID>]
+    Returns:
+        0 - Valid chain (0 broken links)
+        1 - Invalid chain (tampered or broken link detected)
+        2 - Argument parsing or invalid UUID error
+    """
+    parser = argparse.ArgumentParser(
+        description="Verify cryptographic hash chain integrity for Bharat FoodSafe audit logs."
+    )
+    parser.add_argument(
+        "--restaurant-id",
+        type=str,
+        default=None,
+        help="Optional UUID of a specific tenant to verify. If omitted, verifies all tenant and global chains.",
+    )
+    args = parser.parse_args(argv)
+
+    target_id: uuid.UUID | None = None
+    if args.restaurant_id:
+        try:
+            target_id = uuid.UUID(args.restaurant_id)
+        except ValueError:
+            print(
+                f"Error: Invalid UUID for --restaurant-id: '{args.restaurant_id}'", file=sys.stderr
+            )
+            return 2
+
+    # Lazy import to avoid circular dependency
+    from app.core.database import SessionLocal
+
+    with SessionLocal() as db:
+        result = verify_audit_chain(db, restaurant_id=target_id)
+
+    print("=" * 60)
+    print("Bharat FoodSafe - Audit Chain Integrity Verification")
+    print("=" * 60)
+    scope_desc = f"Tenant {target_id}" if target_id else "All Tenant & Global Chains"
+    print(f"Scope:           {scope_desc}")
+    print(f"Records Scanned: {result['records_scanned']}")
+    print(f"Status:          {'VALID' if result['is_valid'] else 'INVALID'}")
+    print("-" * 60)
+
+    if result["is_valid"]:
+        print("PASS: Audit hash chain is intact with zero broken links or tampered records.")
+        print("=" * 60)
+        return 0
+    else:
+        print(f"FAIL: Detected {len(result['errors'])} integrity violation(s):")
+        for err in result["errors"]:
+            tenant_info = (
+                f" [Tenant: {err.get('restaurant_id')}]" if err.get("restaurant_id") else ""
+            )
+            print(
+                f"  - Record {err.get('record_id')}{tenant_info} at index {err.get('index')}: {err.get('error_type')}"
+            )
+            print(f"    {err.get('message')}")
+        print("=" * 60)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

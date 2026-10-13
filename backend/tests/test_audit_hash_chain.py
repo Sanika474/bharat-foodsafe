@@ -1,12 +1,17 @@
+import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.audit import (
     GENESIS_PREVIOUS_HASH,
     compute_record_hash,
+    format_datetime_canonical,
+    main as audit_cli_main,
     record_audit_event,
     verify_audit_chain,
 )
@@ -580,3 +585,242 @@ def test_api_audit_mutation_prohibited(audit_test_data, db_session: Session):
     )
     assert res.status_code == 409
     assert res.json()["error"]["code"] == "AUDIT_LOG_IMMUTABLE"
+
+
+# ------------------------------------------------------------------------------
+# 5. Concurrency & CLI Verification Tests (Phase 6, Task 6.1.4)
+# ------------------------------------------------------------------------------
+
+
+def test_concurrent_audit_writes_maintain_chain_integrity(audit_test_data, db_session: Session):
+    """
+    Verifies that multiple concurrent writers appending to the same tenant's audit chain
+    using PostgreSQL transaction advisory locks (pg_advisory_xact_lock) maintain complete
+    hash-chain integrity without dropped records or broken links.
+    """
+    rest_a_id = audit_test_data["rest_a"].id
+    staff_a1 = audit_test_data["staff_a1"]
+    num_writers = 8
+    writes_per_writer = 3
+    total_records = num_writers * writes_per_writer
+
+    def worker_write(writer_id: int, seq: int) -> str:
+        with SessionLocal() as session:
+            rec = record_audit_event(
+                db=session,
+                event_name=f"CONCURRENT_OP_W{writer_id}_S{seq}",
+                resource_type="entry",
+                restaurant_id=rest_a_id,
+                user_id=staff_a1.id,
+                payload_jsonb={
+                    "writer_id": writer_id,
+                    "seq": seq,
+                    "data": f"payload_{writer_id}_{seq}",
+                },
+            )
+            session.commit()
+            return str(rec.id)
+
+    with ThreadPoolExecutor(max_workers=num_writers) as executor:
+        futures = [
+            executor.submit(worker_write, w, s)
+            for w in range(num_writers)
+            for s in range(writes_per_writer)
+        ]
+        created_ids = [f.result() for f in as_completed(futures)]
+
+    # 1. Assert all intended records are persisted with unique IDs
+    assert len(created_ids) == total_records
+    assert len(set(created_ids)) == total_records
+
+    # 2. Assert verify_audit_chain confirms zero broken links
+    res = verify_audit_chain(db_session, restaurant_id=rest_a_id)
+    assert res["is_valid"] is True
+    assert res["records_scanned"] == total_records
+    assert len(res["errors"]) == 0
+
+    # 3. Explicit inspection of canonical chain linkage and stored hashes
+    records = (
+        db_session.query(AuditLog)
+        .filter_by(restaurant_id=rest_a_id)
+        .order_by(AuditLog.created_at.asc(), AuditLog.id.asc())
+        .all()
+    )
+    assert len(records) == total_records
+
+    for idx, rec in enumerate(records):
+        # Genesis link
+        if idx == 0:
+            assert rec.previous_hash == GENESIS_PREVIOUS_HASH
+        else:
+            assert rec.previous_hash == records[idx - 1].record_hash
+
+        # Canonical hash re-computation matches stored record_hash
+        created_at_iso = format_datetime_canonical(rec.created_at)
+        expected_hash = compute_record_hash(
+            restaurant_id=str(rec.restaurant_id),
+            user_id=str(rec.user_id),
+            event_name=rec.event_name,
+            resource_type=rec.resource_type,
+            resource_id=str(rec.resource_id) if rec.resource_id else None,
+            payload_jsonb=rec.payload_jsonb,
+            previous_hash=rec.previous_hash,
+            created_at_iso=created_at_iso,
+        )
+        assert rec.record_hash == expected_hash
+
+
+def test_cross_tenant_concurrent_writes_parallel_and_isolated(audit_test_data, db_session: Session):
+    """
+    Verifies that concurrent writes targeting different tenants execute in parallel
+    using independent per-tenant advisory lock keys without cross-tenant interference.
+    """
+    rest_a_id = audit_test_data["rest_a"].id
+    rest_b_id = audit_test_data["rest_b"].id
+    total_per_tenant = 6
+
+    def write_event(target_rest_id: uuid.UUID, seq: int) -> str:
+        with SessionLocal() as session:
+            rec = record_audit_event(
+                db=session,
+                event_name=f"PARALLEL_REST_{seq}",
+                resource_type="entry",
+                restaurant_id=target_rest_id,
+                payload_jsonb={"seq": seq},
+            )
+            session.commit()
+            return str(rec.id)
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures_a = [executor.submit(write_event, rest_a_id, i) for i in range(total_per_tenant)]
+        futures_b = [executor.submit(write_event, rest_b_id, i) for i in range(total_per_tenant)]
+        for f in as_completed(futures_a + futures_b):
+            f.result()
+
+    # Verify Tenant A chain
+    res_a = verify_audit_chain(db_session, restaurant_id=rest_a_id)
+    assert res_a["is_valid"] is True
+    assert res_a["records_scanned"] == total_per_tenant
+
+    # Verify Tenant B chain
+    res_b = verify_audit_chain(db_session, restaurant_id=rest_b_id)
+    assert res_b["is_valid"] is True
+    assert res_b["records_scanned"] == total_per_tenant
+
+    # Verify system-wide multi-tenant aggregation
+    res_all = verify_audit_chain(db_session, restaurant_id=None)
+    assert res_all["is_valid"] is True
+    assert res_all["records_scanned"] == total_per_tenant * 2
+
+
+def test_unprotected_concurrent_writes_detects_broken_chain(audit_test_data, db_session: Session):
+    """
+    Proves that without concurrency locking, concurrent writers reading the same
+    previous record simultaneously produce an invalid forked chain with duplicate
+    previous_hash values, and verify_audit_chain reliably detects this integrity violation.
+    """
+    rest_a_id = audit_test_data["rest_a"].id
+    barrier = threading.Barrier(2)
+
+    # 1. Seed a genesis record for rest_a
+    record_audit_event(
+        db=db_session,
+        event_name="GENESIS_RECORD",
+        resource_type="entry",
+        restaurant_id=rest_a_id,
+    )
+    db_session.commit()
+
+    # 2. Two unprotected writers that deliberately race by querying last_record simultaneously
+    def unprotected_race_writer(thread_id: int):
+        with SessionLocal() as session:
+            # Step A: Query last record without acquiring advisory lock
+            stmt = (
+                select(AuditLog)
+                .where(AuditLog.restaurant_id == rest_a_id)
+                .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+                .limit(1)
+            )
+            last_record = session.scalar(stmt)
+            prev_hash = last_record.record_hash
+
+            # Step B: Wait for both threads to have read the same previous record
+            barrier.wait()
+
+            # Step C: Both compute record_hash using the same previous_hash
+            now = datetime.now(timezone.utc)
+            now_iso = format_datetime_canonical(now)
+            rec_hash = compute_record_hash(
+                restaurant_id=str(rest_a_id),
+                user_id=None,
+                event_name=f"RACE_WRITE_{thread_id}",
+                resource_type="entry",
+                resource_id=None,
+                payload_jsonb={"thread": thread_id},
+                previous_hash=prev_hash,
+                created_at_iso=now_iso,
+            )
+            entry = AuditLog(
+                id=uuid.uuid4(),
+                restaurant_id=rest_a_id,
+                event_name=f"RACE_WRITE_{thread_id}",
+                resource_type="entry",
+                payload_jsonb={"thread": thread_id},
+                previous_hash=prev_hash,
+                record_hash=rec_hash,
+                created_at=now,
+            )
+            session.add(entry)
+            session.commit()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        f1 = executor.submit(unprotected_race_writer, 1)
+        f2 = executor.submit(unprotected_race_writer, 2)
+        f1.result()
+        f2.result()
+
+    # 3. verify_audit_chain must detect the broken chain (duplicate previous_hash / linkage break)
+    res = verify_audit_chain(db_session, restaurant_id=rest_a_id)
+    assert res["is_valid"] is False
+    assert res["records_scanned"] == 3
+    assert len(res["errors"]) >= 1
+    error_types = [e["error_type"] for e in res["errors"]]
+    assert "PREVIOUS_HASH_MISMATCH" in error_types
+
+
+def test_audit_verification_cli_execution(audit_test_data, db_session: Session):
+    """
+    Verifies that the standalone audit verification CLI correctly reports integrity
+    results, handles --restaurant-id filtering, and returns exit code 0 on valid chains
+    and exit code 1 on corrupted chains.
+    """
+    rest_a_id = audit_test_data["rest_a"].id
+    rec = record_audit_event(
+        db=db_session,
+        event_name="CLI_TEST_EVENT",
+        resource_type="entry",
+        restaurant_id=rest_a_id,
+    )
+    db_session.commit()
+
+    from app.cli.verify_audit import main as cli_module_main
+
+    # 1. Valid chain -> Exit code 0
+    code_valid_all = audit_cli_main([])
+    assert code_valid_all == 0
+
+    assert cli_module_main([]) == 0
+
+    code_valid_tenant = audit_cli_main(["--restaurant-id", str(rest_a_id)])
+    assert code_valid_tenant == 0
+
+    # 2. Invalid UUID argument -> Exit code 2
+    code_invalid_uuid = audit_cli_main(["--restaurant-id", "not-a-valid-uuid"])
+    assert code_invalid_uuid == 2
+
+    # 3. Corrupted chain -> Exit code 1
+    db_session.query(AuditLog).filter_by(id=rec.id).update({"record_hash": "f" * 64})
+    db_session.commit()
+
+    code_corrupt = audit_cli_main(["--restaurant-id", str(rest_a_id)])
+    assert code_corrupt == 1
