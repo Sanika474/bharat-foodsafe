@@ -50,5 +50,6 @@ htmlcov/
 Thumbs.db
 
 # User data & uploads
-uploads/
+/uploads/
+/backend/uploads/
 *.log
